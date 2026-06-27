@@ -1,0 +1,57 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install dependencies",
+      "type": "shell",
+      "command": "npm install",
+      "inAgents": true,
+      "runOptions": { "runOn": "worktreeCreated" }
+    },
+    {
+      "label": "Start dev server",
+      "type": "shell",
+      "command": "npm run dev",
+      "inAgents": true
+    },
+    {
+      "label": "Build for production",
+      "type": "shell",
+      "command": "npm run build",
+      "inAgents": true
+    },
+    {
+      "label": "Preview production build",
+      "type": "shell",
+      "command": "npm run preview",
+      "inAgents": true
+    },
+    {
+      "label": "Run tests",
+      "type": "shell",
+      "command": "npm run test",
+      "inAgents": true
+    },
+    {
+      "label": "Start dev server in browser",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "inAgents": true,
+      "presentation": {
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Open dev server in browser",
+      "type": "shell",
+      "windows": {
+        "command": "cmd",
+        "args": ["/c", "start http://localhost:5173"]
+      },
+      "inAgents": true
+    }
+  ]
+}
