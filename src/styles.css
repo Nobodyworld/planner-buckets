@@ -1,8 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Sora:wght@600;700;800&display=swap");
-
 :root {
-  --font-body: "Manrope", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Segoe UI", "Calibri", "Trebuchet MS", system-ui, sans-serif;
+  --font-display:
+    "Segoe UI Variable Display", "Segoe UI", "Franklin Gothic Medium",
+    system-ui, sans-serif;
   font-family: var(--font-body);
   --text: #172033;
   --muted: #536480;
@@ -2895,5 +2895,16 @@ h1 {
   .bucket-column {
     width: min(86vw, 340px);
     min-width: min(86vw, 340px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -110,6 +110,7 @@ export function BucketColumn({
     const drop = (event: DragEvent<HTMLElement>, targetIndex?: number) => {
         if (isBucketDragActive) return;
         event.preventDefault();
+        event.stopPropagation();
         const taskId = event.dataTransfer.getData('text/plain') || draggedTaskId;
         if (taskId) {
             onMoveTask(taskId, bucketId, targetIndex);
@@ -223,7 +224,6 @@ export function BucketColumn({
                             event.dataTransfer.dropEffect = 'move';
                             setActiveDropIndex(index);
                         }}
-                        onDrop={(event) => drop(event, index)}
                     >
                         <div
                             className={`drop-slot interaction-drop-slot interaction-task-drop-slot${draggedTaskId ? ' visible' : ''}${activeDropIndex === index ? ' active' : ''}${settledDropIndex === index ? ' settled' : ''}`}
@@ -249,7 +249,6 @@ export function BucketColumn({
                                 event.dataTransfer.dropEffect = 'move';
                                 setActiveDropIndex(index);
                             }}
-                            onCardDrop={(event) => drop(event, index)}
                             onDragStart={(event) => {
                                 event.dataTransfer.setData('text/plain', task.id);
                                 event.dataTransfer.effectAllowed = 'move';
