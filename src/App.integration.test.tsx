@@ -85,6 +85,34 @@ describe('App integration', () => {
         expect(toggleGroup).toHaveAttribute('data-expanded', 'false');
     });
 
+    it('keeps an open sidepanel open after locking it', () => {
+        vi.useFakeTimers();
+        const { container } = render(<App />);
+
+        const toggleGroup = container.querySelector('.sidepanel-toggle-group');
+        const toggleButton = screen.getByRole('button', { name: 'Open planner controls' });
+
+        fireEvent.mouseEnter(toggleButton);
+
+        act(() => {
+            vi.advanceTimersByTime(130);
+        });
+
+        expect(toggleGroup).toHaveAttribute('data-expanded', 'true');
+
+        const lockButton = screen.getByRole('button', { name: 'Disable automatic controls opening' });
+        fireEvent.click(lockButton);
+
+        expect(toggleGroup).toHaveAttribute('data-auto-open-locked', 'true');
+        expect(toggleGroup).toHaveAttribute('data-expanded', 'true');
+
+        act(() => {
+            vi.advanceTimersByTime(250);
+        });
+
+        expect(toggleGroup).toHaveAttribute('data-expanded', 'true');
+    });
+
     it('copies a single task with bucket metadata', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, 'clipboard', {

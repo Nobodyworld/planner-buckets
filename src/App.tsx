@@ -987,8 +987,10 @@ export default function App() {
   };
 
   const scheduleSidepanelClose = (delayMs = 220) => {
+    if (isSidepanelLocked) return;
     clearSidepanelCloseTimer();
     sidepanelCloseTimeoutRef.current = window.setTimeout(() => {
+      if (isSidepanelLocked) return;
       if (hasSidepanelInteractionTarget()) return;
       setIsSidepanelOpen(false);
       sidepanelCloseTimeoutRef.current = null;
@@ -1062,6 +1064,7 @@ export default function App() {
       event.currentTarget.blur();
     }
     clearSidepanelOpenTimer();
+    clearSidepanelCloseTimer();
     setIsSidepanelLocked((current) => {
       return !current;
     });

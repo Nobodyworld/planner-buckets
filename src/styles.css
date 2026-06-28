@@ -44,9 +44,9 @@
   --anim-quick-slide: calc(520ms * var(--motion-multiplier));
   --anim-undo-close: calc(620ms * var(--motion-multiplier));
   --anim-pulse-slot: calc(700ms * var(--motion-multiplier));
-  --anim-electric-scan: calc(760ms * var(--motion-multiplier));
-  --anim-bucket-insert-scan: calc(1420ms * var(--motion-multiplier));
-  --anim-bucket-insert-glow: calc(1580ms * var(--motion-multiplier));
+  --anim-electric-scan: calc(2400ms * var(--motion-multiplier));
+  --anim-bucket-insert-scan: calc(3400ms * var(--motion-multiplier));
+  --anim-bucket-insert-glow: calc(4200ms * var(--motion-multiplier));
   --anim-bucket-relocate: calc(920ms * var(--motion-multiplier));
   --anim-bucket-orb-flow: calc(2800ms * var(--motion-multiplier));
   --anim-drop-settle: calc(760ms * var(--motion-multiplier));
@@ -2285,9 +2285,9 @@ h1 {
   );
   transform: scaleX(1.04) translateY(-2px);
   box-shadow:
-    0 0 0 2px color-mix(in oklab, var(--bucket-accent) 28%, transparent),
-    0 0 36px color-mix(in oklab, var(--bucket-accent) 28%, transparent),
-    0 0 58px color-mix(in oklab, var(--bucket-accent) 18%, transparent);
+    0 0 0 2px color-mix(in oklab, var(--bucket-accent) 20%, transparent),
+    0 0 24px color-mix(in oklab, var(--bucket-accent) 18%, transparent),
+    0 0 40px color-mix(in oklab, var(--bucket-accent) 10%, transparent);
 }
 
 .bucket-drop-slot.active::before,
@@ -2298,9 +2298,9 @@ h1 {
 .bucket-drop-slot.active::before {
   inset: 4px 2px;
   box-shadow:
-    0 0 0 1px color-mix(in oklab, white 38%, transparent),
-    0 0 22px color-mix(in oklab, var(--bucket-accent) 24%, transparent),
-    0 0 36px color-mix(in oklab, var(--bucket-accent) 18%, transparent);
+    0 0 0 1px color-mix(in oklab, white 26%, transparent),
+    0 0 14px color-mix(in oklab, var(--bucket-accent) 16%, transparent),
+    0 0 24px color-mix(in oklab, var(--bucket-accent) 10%, transparent);
   animation:
     electric-scan var(--anim-bucket-insert-scan) linear infinite,
     bucket-insert-lane-glow var(--anim-bucket-insert-glow) var(--ease-emphasis)
@@ -2310,6 +2310,7 @@ h1 {
 .bucket-drop-slot.active::after {
   inset: -14px;
   transform: scaleX(1.2);
+  opacity: 0.72;
   animation: bucket-insert-lane-glow var(--anim-bucket-insert-glow)
     var(--ease-emphasis) infinite;
 }
@@ -2677,12 +2678,12 @@ h1 {
 @keyframes bucket-insert-lane-glow {
   0%,
   100% {
-    opacity: 0.74;
-    transform: scaleX(0.92);
+    opacity: 0.58;
+    transform: scaleX(0.82);
   }
-  50% {
-    opacity: 1;
-    transform: scaleX(1.08);
+  68% {
+    opacity: 0.9;
+    transform: scaleX(0.98);
   }
 }
 
@@ -2757,10 +2758,10 @@ h1 {
 
 @keyframes electric-scan {
   0% {
-    background-position: 0 0;
+    background-position: 0% 0;
   }
   100% {
-    background-position: 38px 0;
+    background-position: 100% 0;
   }
 }
 
