@@ -148,4 +148,158 @@ describe('App integration', () => {
 
         expect(writeText).toHaveBeenCalledWith('1. [ ] Write launch summary\n   Note: Include blockers');
     });
+
+    it('pastes copied tasks into another bucket', async () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Copy all tasks in To Do' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Paste tasks into Unassigned' }));
+
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as PlannerData;
+            expect(saved.tasks.length).toBe(2);
+        });
+
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as PlannerData;
+        const pastedTask = saved.tasks.find((task) => task.id !== 'task-1');
+        expect(pastedTask?.title).toBe('Write launch summary');
+        expect(pastedTask?.bucketId).toBeNull();
+    });
+
+    it('supports undo and redo keyboard shortcuts for planner actions', async () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open planner controls' }));
+        fireEvent.change(screen.getByLabelText('Quick add task title'), {
+            target: { value: 'Undo target task' },
+        });
+        fireEvent.keyDown(screen.getByLabelText('Quick add task title'), { key: 'Enter' });
+
+        expect(screen.getByRole('button', { name: 'Undo target task' })).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+
+        await waitFor(() => {
+            expect(screen.queryByRole('button', { name: 'Undo target task' })).not.toBeInTheDocument();
+        });
+
+        fireEvent.keyDown(window, { key: 'y', ctrlKey: true });
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Undo target task' })).toBeInTheDocument();
+        });
+    });
+
+    it('creates a new bucket and task together from quick add', () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open planner controls' }));
+
+        fireEvent.change(screen.getByLabelText('Quick add task title'), {
+            target: { value: 'Draft release notes' },
+        });
+        fireEvent.change(screen.getByLabelText('Quick add bucket name'), {
+            target: { value: 'Release Prep' },
+        });
+
+        fireEvent.keyDown(screen.getByLabelText('Quick add bucket name'), { key: 'Enter' });
+
+        expect(screen.getByRole('heading', { name: 'Release Prep' })).toBeInTheDocument();
+
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as PlannerData;
+        const createdBucket = saved.buckets.find((bucket) => bucket.name === 'Release Prep');
+        const createdTask = saved.tasks.find((task) => task.title === 'Draft release notes');
+
+        expect(createdBucket).toBeTruthy();
+        expect(createdTask?.bucketId).toBe(createdBucket?.id);
+    });
+
+    it('falls back to Unassigned when quick-add bucket text is invalid', () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open planner controls' }));
+
+        fireEvent.change(screen.getByLabelText('Quick add task title'), {
+            target: { value: 'Follow up with vendor' },
+        });
+        fireEvent.change(screen.getByLabelText('Quick add bucket name'), {
+            target: { value: '@@@' },
+        });
+
+        fireEvent.keyDown(screen.getByLabelText('Quick add bucket name'), { key: 'Enter' });
+
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as PlannerData;
+        const createdTask = saved.tasks.find((task) => task.title === 'Follow up with vendor');
+
+        expect(createdTask?.bucketId).toBeNull();
+        expect(saved.buckets.some((bucket) => bucket.name === '@@@')).toBe(false);
+    });
+
+    it('accepts bucket autocomplete with ArrowRight and submits to that bucket', () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open planner controls' }));
+
+        fireEvent.change(screen.getByLabelText('Quick add task title'), {
+            target: { value: 'Call supplier' },
+        });
+
+        const bucketInput = screen.getByLabelText('Quick add bucket name');
+        fireEvent.change(bucketInput, {
+            target: { value: 'To' },
+        });
+        fireEvent.keyDown(bucketInput, { key: 'ArrowRight' });
+
+        expect((bucketInput as HTMLInputElement).value).toBe('To Do');
+
+        fireEvent.keyDown(bucketInput, { key: 'Enter' });
+
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as PlannerData;
+        const createdTask = saved.tasks.find((task) => task.title === 'Call supplier');
+        expect(createdTask?.bucketId).toBe('bucket-todo');
+    });
+
+    it('shows ghost autocomplete suffix in quick bucket input while typing', () => {
+        const { container } = render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open planner controls' }));
+
+        const bucketInput = screen.getByLabelText('Quick add bucket name');
+        fireEvent.change(bucketInput, {
+            target: { value: 'To' },
+        });
+
+        const ghostSuffix = container.querySelector('.quick-task-bucket-ghost-suffix');
+        expect(ghostSuffix).toBeTruthy();
+        expect(ghostSuffix?.textContent).toBe(' Do');
+    });
+
+    it('keeps board inline task input open after submitting tasks', () => {
+        render(<App />);
+
+        fireEvent.click(screen.getAllByRole('button', { name: '+ Add task' })[0]);
+
+        const input = screen.getByLabelText('Add task in Unassigned');
+        fireEvent.change(input, { target: { value: 'Inline board task' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+
+        expect(screen.getByLabelText('Add task in Unassigned')).toBeInTheDocument();
+        expect((screen.getByLabelText('Add task in Unassigned') as HTMLInputElement).value).toBe('');
+
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as PlannerData;
+        const createdTask = saved.tasks.find((task) => task.title === 'Inline board task');
+        expect(createdTask?.bucketId).toBeNull();
+    });
+
+    it('creates a bucket from board inline add bucket entry', () => {
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: '+ Add bucket' }));
+
+        const input = screen.getByLabelText('Add bucket in board');
+        fireEvent.change(input, { target: { value: 'Board Added Bucket' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+
+        expect(screen.getByRole('heading', { name: 'Board Added Bucket' })).toBeInTheDocument();
+    });
 });

@@ -360,4 +360,55 @@ describe('plannerReducer', () => {
     expect(replaced.tasks.find((task) => task.id === 'task-keep')?.title).toBe('Keep title');
     expect(replaced.tasks.find((task) => task.id === 'task-unassigned')?.bucketId).toBeNull();
   });
+
+  it('adds tasks in a batch for paste flows', () => {
+    const next = plannerReducer(baseState, {
+      type: 'ADD_TASK_BATCH',
+      drafts: [
+        { title: 'Batch one', description: 'First', bucketId: 'bucket-a' },
+        { title: '  ', description: 'Ignored', bucketId: 'bucket-a' },
+        { title: 'Batch two', description: '', bucketId: null },
+      ],
+    });
+
+    expect(next.tasks.map((task) => task.title)).toEqual(['Test task', 'Batch one', 'Batch two']);
+    expect(next.tasks[1]?.bucketId).toBe('bucket-a');
+    expect(next.tasks[2]?.bucketId).toBeNull();
+  });
+
+  it('moves multiple tasks together preserving relative order', () => {
+    const stateWithMany: PlannerData = {
+      ...baseState,
+      tasks: [
+        {
+          ...baseState.tasks[0],
+          id: 'task-1',
+          title: 'First',
+          bucketId: 'bucket-a',
+        },
+        {
+          ...baseState.tasks[0],
+          id: 'task-2',
+          title: 'Second',
+          bucketId: 'bucket-a',
+        },
+        {
+          ...baseState.tasks[0],
+          id: 'task-3',
+          title: 'Third',
+          bucketId: 'bucket-b',
+        },
+      ],
+    };
+
+    const next = plannerReducer(stateWithMany, {
+      type: 'MOVE_TASKS',
+      taskIds: ['task-2', 'task-1'],
+      bucketId: 'bucket-b',
+      targetIndex: 1,
+    });
+
+    expect(next.tasks.map((task) => task.id)).toEqual(['task-3', 'task-1', 'task-2']);
+    expect(next.tasks.filter((task) => task.bucketId === 'bucket-b').map((task) => task.id)).toEqual(['task-3', 'task-1', 'task-2']);
+  });
 });

@@ -9,9 +9,12 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Added
 
 - Clipboard copy actions for individual tasks and ordered active task lists per bucket.
+- Multi-select task copy/paste between buckets.
+- Undo and redo history wrapper for reducer-driven planner actions.
 - Repository hygiene baseline for private-to-public readiness.
 - GitHub Actions CI workflow for build/test verification.
 - Contribution, security, and pull request templates.
+- MIT license and README architecture/screenshot documentation.
 
 ### Changed
 

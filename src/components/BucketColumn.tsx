@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Bucket, PlannerTask } from '../types';
 import { TaskCard } from './TaskCard';
 
@@ -17,18 +17,26 @@ interface BucketColumnProps {
     uploadedTaskIdSet?: Set<string>;
     registerColumnRef?: (bucketId: string, element: HTMLElement | null) => void;
     isWarpHighlight?: boolean;
-    onAddTask: (bucketId: string | null) => void;
+    onQuickAddTask: (bucketId: string | null, title: string) => void;
     onCopyBucketTasks?: (bucketId: string | null) => void;
     onCopyTask?: (task: PlannerTask, bucketName: string) => void;
     onEditTask: (task: PlannerTask) => void;
     onDeleteTask: (task: PlannerTask) => void;
     onToggleTask: (taskId: string) => void;
     onMoveTask: (taskId: string, bucketId: string | null, targetIndex?: number) => void;
+    onMoveTasks?: (taskIds: string[], bucketId: string | null, targetIndex?: number) => void;
     onToggleTaskPin: (taskId: string) => void;
-    onDragStart: (taskId: string) => void;
+    onDragStart: (taskId: string, taskIds: string[]) => void;
     onDragEnd: () => void;
+    selectedTaskIds?: ReadonlySet<string>;
+    onSelectTask?: (taskId: string, event: ReactMouseEvent<HTMLElement>) => void;
+    onPasteIntoBucket?: (bucketId: string | null) => void;
+    canPasteIntoBucket?: boolean;
     onBucketDragStart?: (bucketId: string) => void;
     onBucketDragEnd?: () => void;
+    onMoveBucketByOffset?: (bucketId: string, offset: -1 | 1) => void;
+    canMoveBucketLeft?: boolean;
+    canMoveBucketRight?: boolean;
     onBucketDropSettleEnd?: () => void;
     copyTaskCount?: number;
     onToggleBucketPin?: (bucket: Bucket) => void;
@@ -59,18 +67,26 @@ export function BucketColumn({
     uploadedTaskIdSet,
     registerColumnRef,
     isWarpHighlight = false,
-    onAddTask,
+    onQuickAddTask,
     onCopyBucketTasks,
     onCopyTask,
     onEditTask,
     onDeleteTask,
     onToggleTask,
     onMoveTask,
+    onMoveTasks,
     onToggleTaskPin,
     onDragStart,
     onDragEnd,
+    selectedTaskIds,
+    onSelectTask,
+    onPasteIntoBucket,
+    canPasteIntoBucket = false,
     onBucketDragStart,
     onBucketDragEnd,
+    onMoveBucketByOffset,
+    canMoveBucketLeft = false,
+    canMoveBucketRight = false,
     onBucketDropSettleEnd,
     copyTaskCount = tasks.length,
     onToggleBucketPin,
@@ -81,7 +97,10 @@ export function BucketColumn({
     const [activeDropIndex, setActiveDropIndex] = useState<number | null>(null);
     const [settledDropIndex, setSettledDropIndex] = useState<number | null>(null);
     const [settledTaskId, setSettledTaskId] = useState<string | null>(null);
+    const [inlineTaskTitle, setInlineTaskTitle] = useState('');
+    const [isInlineTaskEntryOpen, setIsInlineTaskEntryOpen] = useState(false);
     const settleTimeoutRef = useRef<number | null>(null);
+    const inlineTaskInputRef = useRef<HTMLInputElement>(null);
     const bucketId = bucket?.id ?? null;
     const bucketLabel = bucket?.name ?? 'Unassigned';
     const accentIndex = accentIndexFromBucket(bucketId);
@@ -111,10 +130,26 @@ export function BucketColumn({
         if (isBucketDragActive) return;
         event.preventDefault();
         event.stopPropagation();
+        const encodedTaskIds = event.dataTransfer.getData('application/x-planner-task-ids');
+        const parsedTaskIds = (() => {
+            if (!encodedTaskIds) return [] as string[];
+            try {
+                const value: unknown = JSON.parse(encodedTaskIds);
+                return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+            } catch {
+                return [] as string[];
+            }
+        })();
         const taskId = event.dataTransfer.getData('text/plain') || draggedTaskId;
-        if (taskId) {
-            onMoveTask(taskId, bucketId, targetIndex);
-            setSettledTaskId(taskId);
+        const moveIds = parsedTaskIds.length > 0 ? parsedTaskIds : (taskId ? [taskId] : []);
+
+        if (moveIds.length > 0) {
+            if (moveIds.length > 1 && onMoveTasks) {
+                onMoveTasks(moveIds, bucketId, targetIndex);
+            } else {
+                onMoveTask(moveIds[0], bucketId, targetIndex);
+            }
+            setSettledTaskId(moveIds[0]);
             setSettledDropIndex(targetIndex ?? tasks.length);
             if (settleTimeoutRef.current !== null) {
                 window.clearTimeout(settleTimeoutRef.current);
@@ -128,6 +163,43 @@ export function BucketColumn({
         setIsOver(false);
         setActiveDropIndex(null);
         onDragEnd();
+    };
+
+    const moveTaskByOffset = (taskId: string, currentIndex: number, offset: -1 | 1) => {
+        const targetIndex = Math.max(0, Math.min(tasks.length - 1, currentIndex + offset));
+        if (targetIndex === currentIndex) return;
+        onMoveTask(taskId, bucketId, targetIndex);
+    };
+
+    const openInlineTaskEntry = () => {
+        setIsInlineTaskEntryOpen(true);
+        window.requestAnimationFrame(() => {
+            inlineTaskInputRef.current?.focus();
+        });
+    };
+
+    const submitInlineTask = () => {
+        const title = inlineTaskTitle.trim();
+        if (!title) return;
+        onQuickAddTask(bucketId, title);
+        setInlineTaskTitle('');
+        window.requestAnimationFrame(() => {
+            inlineTaskInputRef.current?.focus();
+        });
+    };
+
+    const handleInlineTaskKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            submitInlineTask();
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            setInlineTaskTitle('');
+            setIsInlineTaskEntryOpen(false);
+        }
     };
 
     return (
@@ -174,6 +246,18 @@ export function BucketColumn({
                                 ⧉
                             </button>
                         )}
+                        {onPasteIntoBucket && (
+                            <button
+                                type="button"
+                                className="icon-button"
+                                onClick={() => onPasteIntoBucket(bucketId)}
+                                disabled={!canPasteIntoBucket}
+                                title={canPasteIntoBucket ? `Paste tasks into ${bucketLabel}` : 'Copy tasks first to paste'}
+                                aria-label={canPasteIntoBucket ? `Paste tasks into ${bucketLabel}` : 'Copy tasks first to paste'}
+                            >
+                                ⎘
+                            </button>
+                        )}
                         {bucket && (
                             <>
                                 <button
@@ -191,6 +275,26 @@ export function BucketColumn({
                                     aria-label="Drag to move bucket"
                                 >
                                     ⠿
+                                </button>
+                                <button
+                                    type="button"
+                                    className="icon-button bucket-move-button"
+                                    onClick={() => bucket && onMoveBucketByOffset?.(bucket.id, -1)}
+                                    disabled={!canMoveBucketLeft}
+                                    title="Move bucket left"
+                                    aria-label="Move bucket left"
+                                >
+                                    ←
+                                </button>
+                                <button
+                                    type="button"
+                                    className="icon-button bucket-move-button"
+                                    onClick={() => bucket && onMoveBucketByOffset?.(bucket.id, 1)}
+                                    disabled={!canMoveBucketRight}
+                                    title="Move bucket right"
+                                    aria-label="Move bucket right"
+                                >
+                                    →
                                 </button>
                                 <button
                                     type="button"
@@ -242,7 +346,13 @@ export function BucketColumn({
                             onDelete={() => onDeleteTask(task)}
                             onToggle={() => onToggleTask(task.id)}
                             onTogglePin={() => onToggleTaskPin(task.id)}
+                            onMoveUp={() => moveTaskByOffset(task.id, index, -1)}
+                            onMoveDown={() => moveTaskByOffset(task.id, index, 1)}
+                            canMoveUp={index > 0}
+                            canMoveDown={index < tasks.length - 1}
                             onCopy={onCopyTask ? () => onCopyTask(task, bucketLabel) : undefined}
+                            isSelected={selectedTaskIds?.has(task.id) ?? false}
+                            onCardClick={onSelectTask ? (event) => onSelectTask(task.id, event) : undefined}
                             onCardDragOver={(event) => {
                                 if (isBucketDragActive) return;
                                 event.preventDefault();
@@ -250,9 +360,13 @@ export function BucketColumn({
                                 setActiveDropIndex(index);
                             }}
                             onDragStart={(event) => {
-                                event.dataTransfer.setData('text/plain', task.id);
+                                const dragTaskIds = selectedTaskIds?.has(task.id)
+                                    ? tasks.filter((item) => selectedTaskIds?.has(item.id)).map((item) => item.id)
+                                    : [task.id];
+                                event.dataTransfer.setData('application/x-planner-task-ids', JSON.stringify(dragTaskIds));
+                                event.dataTransfer.setData('text/plain', dragTaskIds[0]);
                                 event.dataTransfer.effectAllowed = 'move';
-                                onDragStart(task.id);
+                                onDragStart(task.id, dragTaskIds);
                             }}
                             onDragEnd={onDragEnd}
                             isDragging={draggedTaskId === task.id}
@@ -284,9 +398,22 @@ export function BucketColumn({
                 )}
             </div>
 
-            <button type="button" className="add-task-button" onClick={() => onAddTask(bucketId)}>
-                + Add task
-            </button>
+            {isInlineTaskEntryOpen ? (
+                <input
+                    ref={inlineTaskInputRef}
+                    className="add-task-inline-input"
+                    value={inlineTaskTitle}
+                    onChange={(event) => setInlineTaskTitle(event.target.value)}
+                    onKeyDown={handleInlineTaskKeyDown}
+                    placeholder={`Add task to ${bucketLabel}`}
+                    maxLength={160}
+                    aria-label={`Add task in ${bucketLabel}`}
+                />
+            ) : (
+                <button type="button" className="add-task-button" onClick={openInlineTaskEntry}>
+                    + Add task
+                </button>
+            )}
         </section>
     );
 }

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useReducer, useRef, useState, type Change
 import { BucketColumn } from './components/BucketColumn';
 import { TaskCard } from './components/TaskCard';
 import { TaskEditor } from './components/TaskEditor';
-import { plannerReducer } from './state/plannerReducer';
+import { plannerReducer, type PlannerAction } from './state/plannerReducer';
 import {
   createId,
   isPlannerData,
@@ -40,6 +40,7 @@ const ensureScrollableTargetInView = (
 
 const UPLOAD_HALO_DURATION_MS = 120000;
 const DROP_SETTLE_DURATION_MS = 1500;
+const QUICK_TASK_BUCKET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _-]*$/;
 
 const normalizeBucketName = (name: string) => name.trim().toLowerCase();
 
@@ -222,9 +223,73 @@ const MAX_BOARD_ZOOM_INDEX = 4;
 const APP_NAME = 'Buckets & Shovels Planner';
 const APP_BANNER = 'B.S. Planner';
 const APP_ICON_TEXT = 'BSP';
+const HISTORY_LIMIT = 200;
+
+interface PlannerHistoryState {
+  past: PlannerData[];
+  present: PlannerData;
+  future: PlannerData[];
+}
+
+type PlannerHistoryAction =
+  | { type: 'APPLY'; action: PlannerAction }
+  | { type: 'UNDO' }
+  | { type: 'REDO' };
+
+const createInitialPlannerHistory = (): PlannerHistoryState => ({
+  past: [],
+  present: loadPlannerData(),
+  future: [],
+});
+
+const plannerHistoryReducer = (
+  state: PlannerHistoryState,
+  action: PlannerHistoryAction,
+): PlannerHistoryState => {
+  switch (action.type) {
+    case 'APPLY': {
+      const nextPresent = plannerReducer(state.present, action.action);
+      if (nextPresent === state.present) return state;
+
+      const nextPast = state.past.length >= HISTORY_LIMIT
+        ? [...state.past.slice(1), state.present]
+        : [...state.past, state.present];
+
+      return {
+        past: nextPast,
+        present: nextPresent,
+        future: [],
+      };
+    }
+
+    case 'UNDO': {
+      if (state.past.length === 0) return state;
+      const previous = state.past[state.past.length - 1];
+      return {
+        past: state.past.slice(0, -1),
+        present: previous,
+        future: [state.present, ...state.future],
+      };
+    }
+
+    case 'REDO': {
+      if (state.future.length === 0) return state;
+      const [next, ...remainingFuture] = state.future;
+      return {
+        past: [...state.past, state.present],
+        present: next,
+        future: remainingFuture,
+      };
+    }
+
+    default:
+      return state;
+  }
+};
 
 export default function App() {
-  const [state, dispatch] = useReducer(plannerReducer, undefined, loadPlannerData);
+  const [historyState, dispatchHistory] = useReducer(plannerHistoryReducer, undefined, createInitialPlannerHistory);
+  const state = historyState.present;
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [bucketName, setBucketName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -245,13 +310,12 @@ export default function App() {
   const [highlightedTaskBucketId, setHighlightedTaskBucketId] = useState<string | null>(null);
   const [uploadedTaskIds, setUploadedTaskIds] = useState<string[]>([]);
   const [pendingTaskSurge, setPendingTaskSurge] = useState(false);
-  const [quickTaskOpen, setQuickTaskOpen] = useState(false);
+  const [quickTaskOpen, setQuickTaskOpen] = useState(true);
   const [quickTaskTitle, setQuickTaskTitle] = useState('');
-  const [quickTaskNote, setQuickTaskNote] = useState('');
+  const [quickTaskBucketName, setQuickTaskBucketName] = useState('');
   const [quickTaskBucketId, setQuickTaskBucketId] = useState<string | null>(null);
-  const [quickTaskShowNote, setQuickTaskShowNote] = useState(false);
-  const [quickTaskShowHotkeys, setQuickTaskShowHotkeys] = useState(false);
-  const [quickTaskAnimTick, setQuickTaskAnimTick] = useState(0);
+  const [boardBucketAddOpen, setBoardBucketAddOpen] = useState(false);
+  const [boardBucketNameDraft, setBoardBucketNameDraft] = useState('');
   const [hideRestoreUndoCard, setHideRestoreUndoCard] = useState(false);
   const [isRestoreUndoClosing, setIsRestoreUndoClosing] = useState(false);
   const [dataActionMessage, setDataActionMessage] = useState<string | null>(null);
@@ -278,6 +342,11 @@ export default function App() {
   const [isSidepanelOpen, setIsSidepanelOpen] = useState(false);
   const [isSidepanelLocked, setIsSidepanelLocked] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [draggedTaskIds, setDraggedTaskIds] = useState<string[]>([]);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [selectionAnchorTaskId, setSelectionAnchorTaskId] = useState<string | null>(null);
+  const [taskClipboard, setTaskClipboard] = useState<Array<Pick<PlannerTask, 'title' | 'description'>>>([]);
+  const [activePasteBucketId, setActivePasteBucketId] = useState<string | null>(null);
   const [draggedBucketId, setDraggedBucketId] = useState<string | null>(null);
   const [activeBucketDropIndex, setActiveBucketDropIndex] = useState<number | null>(null);
   const [settledBucketDropIndex, setSettledBucketDropIndex] = useState<number | null>(null);
@@ -287,7 +356,9 @@ export default function App() {
   const restoreInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const quickTaskInputRef = useRef<HTMLInputElement>(null);
+  const quickTaskBucketInputRef = useRef<HTMLInputElement>(null);
   const quickTaskShellRef = useRef<HTMLDivElement>(null);
+  const boardBucketInputRef = useRef<HTMLInputElement>(null);
   const sidepanelRef = useRef<HTMLElement>(null);
   const sidepanelToggleGroupRef = useRef<HTMLDivElement>(null);
   const sidepanelToggleButtonRef = useRef<HTMLButtonElement>(null);
@@ -302,8 +373,6 @@ export default function App() {
   const taskSurgeTimeoutRef = useRef<number | null>(null);
   const uploadHaloTimeoutRef = useRef<number | null>(null);
   const bucketDropSettleTimeoutRef = useRef<number | null>(null);
-  const quickTaskSubmitTimeoutRef = useRef<number | null>(null);
-  const quickTaskLastEnterAtRef = useRef(0);
   const hideSearchStatusTimeoutRef = useRef<number | null>(null);
   const sidepanelCloseTimeoutRef = useRef<number | null>(null);
   const sidepanelOpenTimeoutRef = useRef<number | null>(null);
@@ -319,6 +388,12 @@ export default function App() {
   const sidepanelToggleTitle = isSidepanelOpen
     ? 'Click to collapse controls'
     : 'Click to open controls';
+  const canUndo = historyState.past.length > 0;
+  const canRedo = historyState.future.length > 0;
+
+  const dispatchPlanner = (action: PlannerAction) => {
+    dispatchHistory({ type: 'APPLY', action });
+  };
 
   useEffect(() => {
     try {
@@ -363,9 +438,6 @@ export default function App() {
       if (bucketDropSettleTimeoutRef.current !== null) {
         window.clearTimeout(bucketDropSettleTimeoutRef.current);
       }
-      if (quickTaskSubmitTimeoutRef.current !== null) {
-        window.clearTimeout(quickTaskSubmitTimeoutRef.current);
-      }
       if (sidepanelCloseTimeoutRef.current !== null) {
         window.clearTimeout(sidepanelCloseTimeoutRef.current);
       }
@@ -403,9 +475,9 @@ export default function App() {
     if (!editor) return;
 
     if (editor.task) {
-      dispatch({ type: 'UPDATE_TASK', taskId: editor.task.id, draft });
+      dispatchPlanner({ type: 'UPDATE_TASK', taskId: editor.task.id, draft });
     } else {
-      dispatch({ type: 'ADD_TASK', draft });
+      dispatchPlanner({ type: 'ADD_TASK', draft });
     }
     setEditor(null);
   };
@@ -431,6 +503,38 @@ export default function App() {
     return filtered;
   }, [tasksByBucket, searchQuery, showCompleted]);
 
+  const selectedTaskIdSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
+
+  const orderedVisibleTaskIds = useMemo(() => {
+    const ordered: string[] = [];
+    (filteredTasksByBucket.get(null) ?? []).forEach((task) => ordered.push(task.id));
+    state.buckets.forEach((bucket) => {
+      (filteredTasksByBucket.get(bucket.id) ?? []).forEach((task) => ordered.push(task.id));
+    });
+    return ordered;
+  }, [filteredTasksByBucket, state.buckets]);
+
+  const visibleTaskIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    orderedVisibleTaskIds.forEach((taskId, index) => {
+      map.set(taskId, index);
+    });
+    return map;
+  }, [orderedVisibleTaskIds]);
+
+  useEffect(() => {
+    const activeTaskIdSet = new Set(
+      state.tasks
+        .filter((task) => !task.archivedAt)
+        .map((task) => task.id),
+    );
+
+    setSelectedTaskIds((current) => current.filter((taskId) => activeTaskIdSet.has(taskId)));
+    if (selectionAnchorTaskId && !activeTaskIdSet.has(selectionAnchorTaskId)) {
+      setSelectionAnchorTaskId(null);
+    }
+  }, [selectionAnchorTaskId, state.tasks]);
+
   const stats = useMemo(() => {
     const archived = state.tasks.filter((task) => task.archivedAt !== null).length;
     const activeTotal = state.tasks.length - archived;
@@ -454,12 +558,64 @@ export default function App() {
     return map;
   }, [state.buckets]);
 
+  const bucketIdByNormalizedName = useMemo(() => {
+    const map = new Map<string, string>();
+    state.buckets.forEach((bucket) => map.set(normalizeBucketName(bucket.name), bucket.id));
+    return map;
+  }, [state.buckets]);
+
   const addBucket = () => {
     const name = bucketName.trim();
     if (!name) return;
-    dispatch({ type: 'ADD_BUCKET', name });
+    dispatchPlanner({ type: 'ADD_BUCKET', name });
     setBucketName('');
     setPendingBucketWarp(true);
+  };
+
+  const addTaskFromBoard = (bucketId: string | null, title: string) => {
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return;
+    dispatchPlanner({
+      type: 'ADD_TASK',
+      draft: {
+        title: normalizedTitle,
+        description: '',
+        bucketId,
+      },
+    });
+    setPendingTaskSurge(true);
+  };
+
+  const openBoardBucketAdd = () => {
+    setBoardBucketAddOpen(true);
+    window.requestAnimationFrame(() => {
+      boardBucketInputRef.current?.focus();
+    });
+  };
+
+  const submitBoardBucketAdd = () => {
+    const name = boardBucketNameDraft.trim();
+    if (!name) return;
+    dispatchPlanner({ type: 'ADD_BUCKET', name });
+    setBoardBucketNameDraft('');
+    setPendingBucketWarp(true);
+    window.requestAnimationFrame(() => {
+      boardBucketInputRef.current?.focus();
+    });
+  };
+
+  const handleBoardBucketKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitBoardBucketAdd();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setBoardBucketNameDraft('');
+      setBoardBucketAddOpen(false);
+    }
   };
 
   const bucketHotkeyTargets = useMemo(
@@ -470,8 +626,7 @@ export default function App() {
   const openQuickTaskComposer = (defaultBucketId: string | null = null) => {
     setQuickTaskOpen(true);
     setQuickTaskBucketId(defaultBucketId);
-    setQuickTaskShowHotkeys(false);
-    setQuickTaskAnimTick((value) => value + 1);
+    setQuickTaskBucketName(defaultBucketId ? bucketNameById.get(defaultBucketId) ?? '' : '');
     window.requestAnimationFrame(() => {
       quickTaskInputRef.current?.focus();
     });
@@ -480,33 +635,56 @@ export default function App() {
   const closeQuickTaskComposer = () => {
     setQuickTaskOpen(false);
     setQuickTaskTitle('');
-    setQuickTaskNote('');
-    setQuickTaskShowNote(false);
-    setQuickTaskShowHotkeys(false);
+    setQuickTaskBucketName('');
     setQuickTaskBucketId(null);
-    if (quickTaskSubmitTimeoutRef.current !== null) {
-      window.clearTimeout(quickTaskSubmitTimeoutRef.current);
-      quickTaskSubmitTimeoutRef.current = null;
-    }
   };
 
-  const submitQuickTask = (overrideBucketId?: string | null) => {
+  const submitQuickTask = () => {
     const title = quickTaskTitle.trim();
     if (!title) return;
 
-    dispatch({
+    const candidateBucketName = quickTaskBucketName.trim();
+    const hasValidBucketName = candidateBucketName
+      ? QUICK_TASK_BUCKET_NAME_PATTERN.test(candidateBucketName)
+      : false;
+
+    let targetBucketId: string | null = null;
+    let createdBucketName: string | null = null;
+
+    if (candidateBucketName && hasValidBucketName) {
+      const existingBucketId = bucketIdByNormalizedName.get(normalizeBucketName(candidateBucketName)) ?? null;
+      if (existingBucketId) {
+        targetBucketId = existingBucketId;
+      } else {
+        const newBucketId = createId();
+        dispatchPlanner({ type: 'ADD_BUCKET', name: candidateBucketName, id: newBucketId });
+        targetBucketId = newBucketId;
+        createdBucketName = candidateBucketName;
+        setPendingBucketWarp(true);
+      }
+    }
+
+    dispatchPlanner({
       type: 'ADD_TASK',
       draft: {
         title,
-        description: quickTaskShowNote ? quickTaskNote.trim() : '',
-        bucketId: overrideBucketId ?? quickTaskBucketId,
+        description: '',
+        bucketId: targetBucketId,
       },
     });
 
     setQuickTaskTitle('');
-    setQuickTaskNote('');
-    setQuickTaskShowNote(false);
-    setQuickTaskShowHotkeys(false);
+    if (targetBucketId) {
+      const normalized = normalizeBucketName(createdBucketName ?? candidateBucketName);
+      const stableName = state.buckets.find((bucket) => normalizeBucketName(bucket.name) === normalized)?.name
+        ?? createdBucketName
+        ?? candidateBucketName;
+      setQuickTaskBucketId(targetBucketId);
+      setQuickTaskBucketName(stableName);
+    } else {
+      setQuickTaskBucketId(null);
+      setQuickTaskBucketName('');
+    }
     setPendingTaskSurge(true);
     quickTaskInputRef.current?.focus();
   };
@@ -515,11 +693,34 @@ export default function App() {
     setQuickTaskBucketId((current) => {
       const currentIndex = Math.max(0, bucketHotkeyTargets.findIndex((value) => value === current));
       const nextIndex = (currentIndex + 1) % bucketHotkeyTargets.length;
-      return bucketHotkeyTargets[nextIndex] ?? null;
+      const nextBucketId = bucketHotkeyTargets[nextIndex] ?? null;
+      setQuickTaskBucketName(nextBucketId ? bucketNameById.get(nextBucketId) ?? '' : '');
+      return nextBucketId;
     });
   };
 
-  const handleQuickTaskKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+  const quickTaskBucketSuggestion = useMemo(() => {
+    const typedValue = quickTaskBucketName.trim();
+    if (!typedValue) return null;
+
+    const typedLower = typedValue.toLowerCase();
+    const match = state.buckets.find((bucket) => {
+      const name = bucket.name.trim();
+      const lower = name.toLowerCase();
+      return lower.startsWith(typedLower) && lower !== typedLower;
+    });
+
+    return match?.name ?? null;
+  }, [quickTaskBucketName, state.buckets]);
+
+  const quickTaskBucketSuggestionSuffix = useMemo(() => {
+    if (!quickTaskBucketSuggestion) return '';
+    const typedValue = quickTaskBucketName.trim();
+    if (!typedValue) return '';
+    return quickTaskBucketSuggestion.slice(typedValue.length);
+  }, [quickTaskBucketName, quickTaskBucketSuggestion]);
+
+  const handleQuickTaskTitleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       closeQuickTaskComposer();
@@ -532,6 +733,7 @@ export default function App() {
       if (digit === 0 || bucketTarget) {
         event.preventDefault();
         setQuickTaskBucketId(bucketTarget ?? null);
+        setQuickTaskBucketName(bucketTarget ? bucketNameById.get(bucketTarget) ?? '' : '');
       }
       return;
     }
@@ -539,25 +741,32 @@ export default function App() {
     if (event.key !== 'Enter') return;
 
     event.preventDefault();
-    if (quickTaskSubmitTimeoutRef.current !== null) {
-      window.clearTimeout(quickTaskSubmitTimeoutRef.current);
-      quickTaskSubmitTimeoutRef.current = null;
-    }
+    submitQuickTask();
+  };
 
-    if (event.repeat) {
-      cycleQuickTaskBucket();
+  const handleQuickTaskBucketKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeQuickTaskComposer();
       return;
     }
 
-    const now = Date.now();
-    const doubleEnterToUnassigned = now - quickTaskLastEnterAtRef.current < 280;
-    quickTaskLastEnterAtRef.current = now;
-    const targetBucketId = doubleEnterToUnassigned ? null : quickTaskBucketId;
+    if (event.key === 'ArrowRight' && quickTaskBucketSuggestion) {
+      const input = event.currentTarget;
+      const cursorAtEnd = input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+      if (cursorAtEnd) {
+        event.preventDefault();
+        setQuickTaskBucketName(quickTaskBucketSuggestion);
+        const bucketId = bucketIdByNormalizedName.get(normalizeBucketName(quickTaskBucketSuggestion)) ?? null;
+        setQuickTaskBucketId(bucketId);
+      }
+      return;
+    }
 
-    quickTaskSubmitTimeoutRef.current = window.setTimeout(() => {
-      submitQuickTask(targetBucketId);
-      quickTaskSubmitTimeoutRef.current = null;
-    }, 150);
+    if (event.key !== 'Enter') return;
+
+    event.preventDefault();
+    submitQuickTask();
   };
 
   const registerBucketElement = (bucketId: string, element: HTMLElement | null) => {
@@ -584,14 +793,22 @@ export default function App() {
   };
 
   const toggleBucketPin = (bucket: Bucket) => {
-    dispatch({ type: 'TOGGLE_BUCKET_PIN', bucketId: bucket.id });
+    dispatchPlanner({ type: 'TOGGLE_BUCKET_PIN', bucketId: bucket.id });
+  };
+
+  const moveBucketByOffset = (bucketId: string, offset: -1 | 1) => {
+    const sourceIndex = state.buckets.findIndex((bucket) => bucket.id === bucketId);
+    if (sourceIndex < 0) return;
+    const targetIndex = Math.max(0, Math.min(state.buckets.length - 1, sourceIndex + offset));
+    if (targetIndex === sourceIndex) return;
+    dispatchPlanner({ type: 'MOVE_BUCKET', bucketId, targetIndex });
   };
 
   const dropBucketAt = (targetIndex: number) => {
     if (!draggedBucketId) return;
     const sourceIndex = state.buckets.findIndex((bucket) => bucket.id === draggedBucketId);
     const settledFrom = sourceIndex >= 0 && targetIndex < sourceIndex ? 'right' : 'left';
-    dispatch({ type: 'MOVE_BUCKET', bucketId: draggedBucketId, targetIndex });
+    dispatchPlanner({ type: 'MOVE_BUCKET', bucketId: draggedBucketId, targetIndex });
     setSettledBucketDropIndex(targetIndex);
     setSettledBucketId(draggedBucketId);
     setSettledBucketFrom(settledFrom);
@@ -623,10 +840,10 @@ export default function App() {
   const confirmDialogAction = () => {
     if (!confirmDialog) return;
     if (confirmDialog.action.type === 'delete-task') {
-      dispatch({ type: 'DELETE_TASK', taskId: confirmDialog.action.taskId });
+      dispatchPlanner({ type: 'DELETE_TASK', taskId: confirmDialog.action.taskId });
     }
     if (confirmDialog.action.type === 'delete-bucket') {
-      dispatch({ type: 'DELETE_BUCKET', bucketId: confirmDialog.action.bucketId });
+      dispatchPlanner({ type: 'DELETE_BUCKET', bucketId: confirmDialog.action.bucketId });
     }
     setConfirmDialog(null);
   };
@@ -639,7 +856,7 @@ export default function App() {
       return;
     }
     if (name !== renameDialog.initialName) {
-      dispatch({ type: 'RENAME_BUCKET', bucketId: renameDialog.bucketId, name });
+      dispatchPlanner({ type: 'RENAME_BUCKET', bucketId: renameDialog.bucketId, name });
     }
     setRenameDialog(null);
     setRenameDialogError(null);
@@ -651,7 +868,7 @@ export default function App() {
   };
 
   const confirmArchiveCompletedTasks = () => {
-    dispatch({ type: 'ARCHIVE_COMPLETED_TASKS' });
+    dispatchPlanner({ type: 'ARCHIVE_COMPLETED_TASKS' });
     setShowArchiveConfirm(false);
   };
 
@@ -727,7 +944,7 @@ export default function App() {
     setLastRestoreBackup(state);
     setHideRestoreUndoCard(false);
     setIsRestoreUndoClosing(false);
-    dispatch({ type: 'REPLACE_DATA', data: pendingRestoreData });
+    dispatchPlanner({ type: 'REPLACE_DATA', data: pendingRestoreData });
     setPendingRestoreData(null);
     setDataActionMessage(null);
   };
@@ -735,7 +952,7 @@ export default function App() {
   const confirmUploadData = () => {
     if (!pendingUploadData) return;
     const mergedUpload = mergeUploadedPlannerData(state, pendingUploadData);
-    dispatch({ type: 'REPLACE_DATA', data: mergedUpload.data });
+    dispatchPlanner({ type: 'REPLACE_DATA', data: mergedUpload.data });
     if (uploadHaloTimeoutRef.current !== null) {
       window.clearTimeout(uploadHaloTimeoutRef.current);
     }
@@ -752,7 +969,7 @@ export default function App() {
 
   const undoRestoreData = () => {
     if (!lastRestoreBackup) return;
-    dispatch({ type: 'REPLACE_DATA', data: lastRestoreBackup });
+    dispatchPlanner({ type: 'REPLACE_DATA', data: lastRestoreBackup });
     setLastRestoreBackup(null);
     setHideRestoreUndoCard(false);
     setIsRestoreUndoClosing(false);
@@ -811,7 +1028,75 @@ export default function App() {
     scheduleSearchStatusHide(1600);
   };
 
+  const applyTaskSelection = (
+    taskId: string,
+    options: {
+      shift: boolean;
+      toggle: boolean;
+    },
+  ) => {
+    if (options.shift && selectionAnchorTaskId) {
+      const anchorIndex = visibleTaskIndexById.get(selectionAnchorTaskId);
+      const targetIndex = visibleTaskIndexById.get(taskId);
+      if (anchorIndex !== undefined && targetIndex !== undefined) {
+        const [start, end] = anchorIndex < targetIndex
+          ? [anchorIndex, targetIndex]
+          : [targetIndex, anchorIndex];
+        const rangeIds = orderedVisibleTaskIds.slice(start, end + 1);
+        setSelectedTaskIds((current) => {
+          if (options.toggle) {
+            return Array.from(new Set([...current, ...rangeIds]));
+          }
+          return rangeIds;
+        });
+        setActivePasteBucketId(state.tasks.find((task) => task.id === taskId)?.bucketId ?? null);
+        return;
+      }
+    }
+
+    if (options.toggle) {
+      setSelectedTaskIds((current) => {
+        const exists = current.includes(taskId);
+        if (exists) {
+          return current.filter((item) => item !== taskId);
+        }
+        return [...current, taskId];
+      });
+      setSelectionAnchorTaskId(taskId);
+      setActivePasteBucketId(state.tasks.find((task) => task.id === taskId)?.bucketId ?? null);
+      return;
+    }
+
+    setSelectedTaskIds([taskId]);
+    setSelectionAnchorTaskId(taskId);
+    setActivePasteBucketId(state.tasks.find((task) => task.id === taskId)?.bucketId ?? null);
+  };
+
+  const handleTaskCardSelection = (taskId: string, event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, input, label, textarea, select, a')) return;
+
+    applyTaskSelection(taskId, {
+      shift: event.shiftKey,
+      toggle: event.ctrlKey || event.metaKey,
+    });
+  };
+
+  const setClipboardFromTasks = (tasks: PlannerTask[]) => {
+    setTaskClipboard(
+      tasks.map((task) => ({
+        title: task.title,
+        description: task.description,
+      })),
+    );
+  };
+
   const copyTaskToClipboard = (task: PlannerTask, bucketName: string) => {
+    setClipboardFromTasks([task]);
+    setSelectedTaskIds([task.id]);
+    setSelectionAnchorTaskId(task.id);
+    setActivePasteBucketId(task.bucketId);
+
     void (async () => {
       try {
         await copyTextToClipboard(formatTaskForSingleCopy(task, bucketName));
@@ -831,6 +1116,11 @@ export default function App() {
       return;
     }
 
+    setClipboardFromTasks(tasks);
+    setSelectedTaskIds(tasks.map((task) => task.id));
+    setSelectionAnchorTaskId(tasks[0]?.id ?? null);
+    setActivePasteBucketId(bucketId);
+
     void (async () => {
       try {
         await copyTextToClipboard(tasks.map(formatTaskForOrderedCopy).join('\n'));
@@ -840,6 +1130,133 @@ export default function App() {
       }
     })();
   };
+
+  const copySelectedTasks = () => {
+    const tasks = state.tasks.filter(
+      (task) => selectedTaskIdSet.has(task.id) && !task.archivedAt,
+    );
+    if (tasks.length === 0) {
+      showTemporaryStatus('Select tasks to copy first');
+      return;
+    }
+
+    setClipboardFromTasks(tasks);
+
+    void (async () => {
+      try {
+        await copyTextToClipboard(tasks.map(formatTaskForOrderedCopy).join('\n'));
+        showTemporaryStatus(`Copied ${tasks.length} selected task${tasks.length === 1 ? '' : 's'}`);
+      } catch {
+        showTemporaryStatus('Could not copy selected tasks');
+      }
+    })();
+  };
+
+  const pasteTasksIntoBucket = (bucketId: string | null) => {
+    if (taskClipboard.length === 0) {
+      showTemporaryStatus('Copy tasks first to paste');
+      return;
+    }
+
+    dispatchPlanner({
+      type: 'ADD_TASK_BATCH',
+      drafts: taskClipboard.map((task) => ({
+        title: task.title,
+        description: task.description,
+        bucketId,
+      })),
+    });
+
+    setPendingTaskSurge(true);
+    setActivePasteBucketId(bucketId);
+    const bucketName = bucketId ? bucketNameById.get(bucketId) ?? 'Unassigned' : 'Unassigned';
+    showTemporaryStatus(`Pasted ${taskClipboard.length} task${taskClipboard.length === 1 ? '' : 's'} into ${bucketName}`);
+  };
+
+  const handleTaskDragStart = (taskId: string, taskIds: string[]) => {
+    setDraggedTaskId(taskId);
+    setDraggedTaskIds(taskIds);
+    setSelectedTaskIds(taskIds);
+    setSelectionAnchorTaskId(taskId);
+    setActivePasteBucketId(state.tasks.find((task) => task.id === taskId)?.bucketId ?? null);
+  };
+
+  const handleTaskDragEnd = () => {
+    setDraggedTaskId(null);
+    setDraggedTaskIds([]);
+  };
+
+  const moveTasksToBucket = (taskIds: string[], bucketId: string | null, targetIndex?: number) => {
+    if (taskIds.length === 0) return;
+
+    if (taskIds.length === 1) {
+      dispatchPlanner({
+        type: 'MOVE_TASK',
+        taskId: taskIds[0],
+        bucketId,
+        targetIndex,
+      });
+      return;
+    }
+
+    dispatchPlanner({
+      type: 'MOVE_TASKS',
+      taskIds,
+      bucketId,
+      targetIndex,
+    });
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+      const withMeta = event.ctrlKey || event.metaKey;
+      if (!withMeta) return;
+
+      const key = event.key.toLowerCase();
+      if (key === 'z' && event.shiftKey) {
+        if (!canRedo) return;
+        event.preventDefault();
+        dispatchHistory({ type: 'REDO' });
+        showTemporaryStatus('Redo');
+        return;
+      }
+
+      if (key === 'z') {
+        if (!canUndo) return;
+        event.preventDefault();
+        dispatchHistory({ type: 'UNDO' });
+        showTemporaryStatus('Undo');
+        return;
+      }
+
+      if (key === 'y') {
+        if (!canRedo) return;
+        event.preventDefault();
+        dispatchHistory({ type: 'REDO' });
+        showTemporaryStatus('Redo');
+        return;
+      }
+
+      if (key === 'c' && selectedTaskIds.length > 0) {
+        event.preventDefault();
+        copySelectedTasks();
+        return;
+      }
+
+      if (key === 'v' && taskClipboard.length > 0) {
+        event.preventDefault();
+        pasteTasksIntoBucket(activePasteBucketId);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [activePasteBucketId, canRedo, canUndo, selectedTaskIds.length, taskClipboard, state.tasks, selectedTaskIdSet]);
 
   useEffect(() => {
     if (isSearchFocused || searchQuery.trim()) {
@@ -915,28 +1332,16 @@ export default function App() {
   }, [pendingTaskSurge, state.tasks]);
 
   const draggedTaskAccentIndex = useMemo(() => {
-    if (!draggedTaskId) return null;
-    const draggedTask = state.tasks.find((task) => task.id === draggedTaskId) ?? null;
+    const leadTaskId = draggedTaskIds[0] ?? draggedTaskId;
+    if (!leadTaskId) return null;
+    const draggedTask = state.tasks.find((task) => task.id === leadTaskId) ?? null;
     if (!draggedTask) return null;
     return accentIndexFromBucket(draggedTask.bucketId);
-  }, [draggedTaskId, state.tasks]);
+  }, [draggedTaskId, draggedTaskIds, state.tasks]);
 
   const uploadedTaskIdSet = useMemo(() => new Set(uploadedTaskIds), [uploadedTaskIds]);
 
-  const quickTaskBucketLabel = quickTaskBucketId === null
-    ? '0: Unassigned'
-    : (() => {
-      const bucketIndex = state.buckets.findIndex((bucket) => bucket.id === quickTaskBucketId);
-      const bucketName = state.buckets[bucketIndex]?.name ?? 'Unknown';
-      return `${bucketIndex + 1}: ${bucketName}`;
-    })();
-
-  const unassignedPinnedHint = useMemo(() => {
-    const hasToDoLeft = state.buckets.some((bucket) => bucket.name.trim().toLowerCase() === 'to do');
-    return hasToDoLeft
-      ? 'Recommendation: Keep Unassigned and To Do on the far left for faster triage.'
-      : 'Recommendation: Keep Unassigned on the far left and pin key buckets near it.';
-  }, [state.buckets]);
+  const triageRecommendation = 'Recommendation: Unassigned stays fixed on the far left. Pin your triage buckets nearby for faster planning.';
 
   useEffect(() => {
     if (!showExportScopeMenu) return;
@@ -1178,6 +1583,37 @@ export default function App() {
                 +
               </button>
             </div>
+            <div className="board-actions" role="group" aria-label="Board actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={copySelectedTasks}
+                disabled={selectedTaskIds.length === 0}
+                title={selectedTaskIds.length === 0 ? 'Select task cards to copy' : 'Copy selected tasks'}
+              >
+                Copy selected ({selectedTaskIds.length})
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => dispatchHistory({ type: 'UNDO' })}
+                disabled={!canUndo}
+                aria-label="Undo"
+                title="Undo (Ctrl/Cmd+Z)"
+              >
+                ↶
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => dispatchHistory({ type: 'REDO' })}
+                disabled={!canRedo}
+                aria-label="Redo"
+                title="Redo (Ctrl/Cmd+Y)"
+              >
+                ↷
+              </button>
+            </div>
           </div>
           <aside
             ref={sidepanelRef}
@@ -1227,141 +1663,62 @@ export default function App() {
             <section className="panel-card">
               <h2>Tasks</h2>
               <div ref={quickTaskShellRef} className={`quick-task-shell interaction-scroll-target${quickTaskOpen ? ' open' : ''}`}>
-                {!quickTaskOpen && (
-                  <button
-                    key={`quick-task-button-${quickTaskAnimTick}`}
-                    type="button"
-                    className="primary-button panel-primary quick-task-trigger"
-                    onClick={() => openQuickTaskComposer(null)}
-                  >
-                    <span className="quick-task-animation-layer" aria-hidden="true">
-                      <span className="quick-fall-text">New task</span>
-                      <span className="quick-enter-text">enter</span>
-                      <span className="quick-plus-text">+</span>
-                    </span>
-                    <span className="quick-task-default-label">+ New task</span>
-                  </button>
-                )}
-
                 {quickTaskOpen && (
-                  <div className="quick-task-inline interaction-enter">
-                    <span className="quick-inline-plus" aria-hidden="true">+</span>
-                    <input
-                      ref={quickTaskInputRef}
-                      className="quick-task-input"
-                      value={quickTaskTitle}
-                      onChange={(event) => setQuickTaskTitle(event.target.value)}
-                      onKeyDown={handleQuickTaskKeyDown}
-                      placeholder="enter"
-                      maxLength={160}
-                      aria-label="Quick add task title"
-                    />
+                  <div className="quick-task-fields interaction-enter">
+                    <div className="quick-task-input-stack">
+                      <input
+                        ref={quickTaskInputRef}
+                        className="quick-task-input"
+                        value={quickTaskTitle}
+                        onChange={(event) => setQuickTaskTitle(event.target.value)}
+                        onKeyDown={handleQuickTaskTitleKeyDown}
+                        placeholder="Task title"
+                        maxLength={160}
+                        aria-label="Quick add task title"
+                      />
+                      <div className="quick-task-bucket-field">
+                        {quickTaskBucketSuggestionSuffix && (
+                          <span className="quick-task-bucket-ghost" aria-hidden="true">
+                            <span className="quick-task-bucket-ghost-typed">{quickTaskBucketName.trim()}</span>
+                            <span className="quick-task-bucket-ghost-suffix">{quickTaskBucketSuggestionSuffix}</span>
+                          </span>
+                        )}
+                        <input
+                          ref={quickTaskBucketInputRef}
+                          className="quick-task-bucket-input"
+                          value={quickTaskBucketName}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setQuickTaskBucketName(value);
+                            const existingBucketId = bucketIdByNormalizedName.get(normalizeBucketName(value)) ?? null;
+                            setQuickTaskBucketId(existingBucketId);
+                          }}
+                          onKeyDown={handleQuickTaskBucketKeyDown}
+                          placeholder="Bucket (optional)"
+                          maxLength={80}
+                          list="quick-task-bucket-options"
+                          title="Autocomplete available. Press Right Arrow to accept suggestion."
+                          aria-label="Quick add bucket name"
+                        />
+                      </div>
+                      <datalist id="quick-task-bucket-options">
+                        {state.buckets.map((bucket) => (
+                          <option key={bucket.id} value={bucket.name} />
+                        ))}
+                      </datalist>
+                    </div>
                     <button
                       type="button"
-                      className={`icon-button quick-task-mini-button${quickTaskShowNote ? ' active' : ''}`}
-                      onClick={() => setQuickTaskShowNote((value) => !value)}
-                      aria-label="Toggle task note"
-                      title="Toggle note"
+                      className="secondary-button"
+                      onClick={submitQuickTask}
+                      disabled={!quickTaskTitle.trim()}
                     >
-                      ▾
-                    </button>
-                    <button
-                      type="button"
-                      className={`icon-button quick-task-mini-button${quickTaskShowHotkeys ? ' active' : ''}`}
-                      onClick={() => setQuickTaskShowHotkeys((value) => !value)}
-                      aria-label="Task bucket hotkeys"
-                      title="Task bucket hotkeys"
-                    >
-                      ⌨
-                    </button>
-                  </div>
-                )}
-
-                {quickTaskOpen && quickTaskShowNote && (
-                  <textarea
-                    className="quick-task-note interaction-enter"
-                    value={quickTaskNote}
-                    onChange={(event) => setQuickTaskNote(event.target.value)}
-                    placeholder="Optional note"
-                    rows={2}
-                  />
-                )}
-
-                {quickTaskOpen && quickTaskShowHotkeys && (
-                  <div className="quick-task-hotkeys interaction-enter" role="note" aria-label="Task hotkeys help">
-                    <span>{quickTaskBucketLabel}</span>
-                    <span>Keys: 0 unassigned, 1-9 buckets, double Enter goes to unassigned, hold Enter cycles buckets.</span>
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => closeQuickTaskComposer()}
-                    >
-                      Close
+                      Add task
                     </button>
                   </div>
                 )}
               </div>
 
-              <label className="inline-toggle" title="Toggle completed task visibility">
-                <input
-                  type="checkbox"
-                  checked={showCompleted}
-                  onChange={(event) => setShowCompleted(event.target.checked)}
-                />
-                <span>Show completed</span>
-              </label>
-
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={archiveCompletedTasks}
-                disabled={stats.completed === 0}
-              >
-                Archive completed ({stats.completed})
-              </button>
-
-              {showArchiveConfirm && stats.completed > 0 && (
-                <div className="inline-confirm" role="group" aria-label="Confirm archive completed tasks">
-                  <span className="inline-confirm-text">
-                    Archive {stats.completed} completed task{stats.completed === 1 ? '' : 's'}?
-                  </span>
-                  <div className="inline-confirm-actions">
-                    <button
-                      type="button"
-                      className="icon-button inline-confirm-accept"
-                      onClick={confirmArchiveCompletedTasks}
-                      aria-label="Confirm archive completed tasks"
-                      title="Confirm"
-                    >
-                      ✓
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button inline-confirm-cancel"
-                      onClick={cancelArchiveCompletedTasks}
-                      aria-label="Cancel archive completed tasks"
-                      title="Cancel"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!showCompleted && (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => {
-                    setShowCompleted(true);
-                  }}
-                >
-                  Show completed again
-                </button>
-              )}
-
-              <p className="toolbar-meta">Showing {stats.visible} task(s)</p>
-              <p className="toolbar-meta pin-recommendation">{unassignedPinnedHint}</p>
             </section>
 
             <section className="panel-card" aria-label="Create bucket">
@@ -1392,6 +1749,69 @@ export default function App() {
                 </button>
               </div>
 
+              <div className="archive-controls">
+                <label className="inline-toggle" title="Toggle completed task visibility">
+                  <input
+                    type="checkbox"
+                    checked={showCompleted}
+                    onChange={(event) => setShowCompleted(event.target.checked)}
+                  />
+                  <span>Show completed</span>
+                </label>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={archiveCompletedTasks}
+                  disabled={stats.completed === 0}
+                >
+                  Archive completed ({stats.completed})
+                </button>
+
+                {showArchiveConfirm && stats.completed > 0 && (
+                  <div className="inline-confirm" role="group" aria-label="Confirm archive completed tasks">
+                    <span className="inline-confirm-text">
+                      Archive {stats.completed} completed task{stats.completed === 1 ? '' : 's'}?
+                    </span>
+                    <div className="inline-confirm-actions">
+                      <button
+                        type="button"
+                        className="icon-button inline-confirm-accept"
+                        onClick={confirmArchiveCompletedTasks}
+                        aria-label="Confirm archive completed tasks"
+                        title="Confirm"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button inline-confirm-cancel"
+                        onClick={cancelArchiveCompletedTasks}
+                        aria-label="Cancel archive completed tasks"
+                        title="Cancel"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!showCompleted && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setShowCompleted(true);
+                    }}
+                  >
+                    Show completed again
+                  </button>
+                )}
+
+                <p className="toolbar-meta archive-meta">Showing {stats.visible} task(s)</p>
+                <p className="toolbar-meta pin-recommendation archive-meta">{triageRecommendation}</p>
+              </div>
+
               {showArchive && (
                 archivedTasks.length > 0 ? (
                   <div className="archive-list">
@@ -1406,13 +1826,13 @@ export default function App() {
                           dragLabel="Archived"
                           onEdit={() => setEditor({ task, defaultBucketId: task.bucketId })}
                           onDelete={() => deleteTask(task)}
-                          onToggle={() => dispatch({ type: 'TOGGLE_TASK', taskId: task.id })}
-                          onTogglePin={() => dispatch({ type: 'TOGGLE_TASK_PIN', taskId: task.id })}
+                          onToggle={() => dispatchPlanner({ type: 'TOGGLE_TASK', taskId: task.id })}
+                          onTogglePin={() => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', taskId: task.id })}
                           onCopy={() => copyTaskToClipboard(
                             task,
                             task.bucketId ? bucketNameById.get(task.bucketId) ?? 'Unassigned' : 'Unassigned',
                           )}
-                          onAuxAction={() => dispatch({ type: 'UNARCHIVE_TASK', taskId: task.id })}
+                          onAuxAction={() => dispatchPlanner({ type: 'UNARCHIVE_TASK', taskId: task.id })}
                           auxActionLabel="Undo"
                           onDragStart={(_event) => undefined}
                           onDragEnd={() => undefined}
@@ -1625,19 +2045,19 @@ export default function App() {
                 isWarpHighlight={highlightedTaskBucketId === null}
                 onCopyBucketTasks={copyBucketTasksToClipboard}
                 onCopyTask={copyTaskToClipboard}
-                onAddTask={(defaultBucketId) => openQuickTaskComposer(defaultBucketId)}
+                onQuickAddTask={addTaskFromBoard}
                 onEditTask={(task) => setEditor({ task, defaultBucketId: task.bucketId })}
                 onDeleteTask={deleteTask}
-                onToggleTask={(taskId) => dispatch({ type: 'TOGGLE_TASK', taskId })}
-                onToggleTaskPin={(taskId) => dispatch({ type: 'TOGGLE_TASK_PIN', taskId })}
-                onMoveTask={(taskId, bucketId, targetIndex) => dispatch({
-                  type: 'MOVE_TASK',
-                  taskId,
-                  bucketId,
-                  targetIndex,
-                })}
-                onDragStart={setDraggedTaskId}
-                onDragEnd={() => setDraggedTaskId(null)}
+                onToggleTask={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK', taskId })}
+                onToggleTaskPin={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', taskId })}
+                onMoveTask={(taskId, bucketId, targetIndex) => moveTasksToBucket([taskId], bucketId, targetIndex)}
+                onMoveTasks={moveTasksToBucket}
+                selectedTaskIds={selectedTaskIdSet}
+                onSelectTask={handleTaskCardSelection}
+                onPasteIntoBucket={pasteTasksIntoBucket}
+                canPasteIntoBucket={taskClipboard.length > 0}
+                onDragStart={handleTaskDragStart}
+                onDragEnd={handleTaskDragEnd}
                 onBucketDropSettleEnd={() => {
                   if (bucketDropSettleTimeoutRef.current !== null) {
                     window.clearTimeout(bucketDropSettleTimeoutRef.current);
@@ -1683,19 +2103,19 @@ export default function App() {
                     isWarpHighlight={highlightedBucketId === bucket.id || highlightedTaskBucketId === bucket.id}
                     onCopyBucketTasks={copyBucketTasksToClipboard}
                     onCopyTask={copyTaskToClipboard}
-                    onAddTask={(defaultBucketId) => openQuickTaskComposer(defaultBucketId)}
+                    onQuickAddTask={addTaskFromBoard}
                     onEditTask={(task) => setEditor({ task, defaultBucketId: task.bucketId })}
                     onDeleteTask={deleteTask}
-                    onToggleTask={(taskId) => dispatch({ type: 'TOGGLE_TASK', taskId })}
-                    onToggleTaskPin={(taskId) => dispatch({ type: 'TOGGLE_TASK_PIN', taskId })}
-                    onMoveTask={(taskId, bucketId, targetIndex) => dispatch({
-                      type: 'MOVE_TASK',
-                      taskId,
-                      bucketId,
-                      targetIndex,
-                    })}
-                    onDragStart={setDraggedTaskId}
-                    onDragEnd={() => setDraggedTaskId(null)}
+                    onToggleTask={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK', taskId })}
+                    onToggleTaskPin={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', taskId })}
+                    onMoveTask={(taskId, bucketId, targetIndex) => moveTasksToBucket([taskId], bucketId, targetIndex)}
+                    onMoveTasks={moveTasksToBucket}
+                    selectedTaskIds={selectedTaskIdSet}
+                    onSelectTask={handleTaskCardSelection}
+                    onPasteIntoBucket={pasteTasksIntoBucket}
+                    canPasteIntoBucket={taskClipboard.length > 0}
+                    onDragStart={handleTaskDragStart}
+                    onDragEnd={handleTaskDragEnd}
                     onToggleBucketPin={toggleBucketPin}
                     onBucketDragStart={(bucketId) => {
                       setDraggedBucketId(bucketId);
@@ -1705,6 +2125,9 @@ export default function App() {
                       setDraggedBucketId(null);
                       setActiveBucketDropIndex(null);
                     }}
+                    onMoveBucketByOffset={moveBucketByOffset}
+                    canMoveBucketLeft={index > 0}
+                    canMoveBucketRight={index < state.buckets.length - 1}
                     onBucketDropSettleEnd={() => {
                       if (bucketDropSettleTimeoutRef.current !== null) {
                         window.clearTimeout(bucketDropSettleTimeoutRef.current);
@@ -1736,6 +2159,25 @@ export default function App() {
                   aria-hidden="true"
                 />
               )}
+
+              <section className="bucket-column board-add-bucket-column" aria-label="Board add bucket">
+                {boardBucketAddOpen ? (
+                  <input
+                    ref={boardBucketInputRef}
+                    className="add-bucket-inline-input"
+                    value={boardBucketNameDraft}
+                    onChange={(event) => setBoardBucketNameDraft(event.target.value)}
+                    onKeyDown={handleBoardBucketKeyDown}
+                    placeholder="Add bucket"
+                    maxLength={80}
+                    aria-label="Add bucket in board"
+                  />
+                ) : (
+                  <button type="button" className="add-bucket-inline-button" onClick={openBoardBucketAdd}>
+                    + Add bucket
+                  </button>
+                )}
+              </section>
             </section>
           </div>
         </section>

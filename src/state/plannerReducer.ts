@@ -2,12 +2,13 @@ import type { PlannerData, TaskDraft } from '../types';
 import { createId, normalizePlannerData } from '../storage/plannerStorage';
 
 export type PlannerAction =
-  | { type: 'ADD_BUCKET'; name: string }
+  | { type: 'ADD_BUCKET'; name: string; id?: string }
   | { type: 'MOVE_BUCKET'; bucketId: string; targetIndex: number }
   | { type: 'TOGGLE_BUCKET_PIN'; bucketId: string }
   | { type: 'RENAME_BUCKET'; bucketId: string; name: string }
   | { type: 'DELETE_BUCKET'; bucketId: string }
   | { type: 'ADD_TASK'; draft: TaskDraft }
+  | { type: 'ADD_TASK_BATCH'; drafts: TaskDraft[] }
   | { type: 'UPDATE_TASK'; taskId: string; draft: TaskDraft }
   | { type: 'TOGGLE_TASK_PIN'; taskId: string }
   | { type: 'DELETE_TASK'; taskId: string }
@@ -15,6 +16,12 @@ export type PlannerAction =
   | {
     type: 'MOVE_TASK';
     taskId: string;
+    bucketId: string | null;
+    targetIndex?: number;
+  }
+  | {
+    type: 'MOVE_TASKS';
+    taskIds: string[];
     bucketId: string | null;
     targetIndex?: number;
   }
@@ -139,6 +146,64 @@ const moveTaskWithOrder = (
   return [...withoutMoved, movedTask];
 };
 
+const moveTasksWithOrder = (
+  tasks: PlannerData['tasks'],
+  taskIds: string[],
+  bucketId: string | null,
+  targetIndex?: number,
+) => {
+  const selectedTaskIds = new Set(taskIds);
+  const movingTasks = tasks.filter((task) => selectedTaskIds.has(task.id));
+  if (movingTasks.length === 0) return tasks;
+
+  const timestamp = now();
+  const withoutMoved = tasks.filter((task) => !selectedTaskIds.has(task.id));
+  const movedTasks = movingTasks.map((task) => ({
+    ...task,
+    bucketId,
+    updatedAt: timestamp,
+  }));
+
+  const bucketTasks = withoutMoved.filter(
+    (task) => task.bucketId === bucketId && !task.archivedAt,
+  );
+
+  const safeIndex = Math.max(
+    0,
+    Math.min(targetIndex ?? bucketTasks.length, bucketTasks.length),
+  );
+
+  const beforeTask = bucketTasks[safeIndex] ?? null;
+  if (beforeTask) {
+    const insertAt = withoutMoved.findIndex((task) => task.id === beforeTask.id);
+    return [
+      ...withoutMoved.slice(0, insertAt),
+      ...movedTasks,
+      ...withoutMoved.slice(insertAt),
+    ];
+  }
+
+  const lastBucketIndex = (() => {
+    for (let i = withoutMoved.length - 1; i >= 0; i -= 1) {
+      if (withoutMoved[i]?.bucketId === bucketId && !withoutMoved[i]?.archivedAt) {
+        return i;
+      }
+    }
+    return -1;
+  })();
+
+  if (lastBucketIndex >= 0) {
+    const insertAt = lastBucketIndex + 1;
+    return [
+      ...withoutMoved.slice(0, insertAt),
+      ...movedTasks,
+      ...withoutMoved.slice(insertAt),
+    ];
+  }
+
+  return [...withoutMoved, ...movedTasks];
+};
+
 export const plannerReducer = (
   state: PlannerData,
   action: PlannerAction,
@@ -152,7 +217,7 @@ export const plannerReducer = (
         ...state,
         buckets: normalizeBucketOrder([
           ...state.buckets,
-          { id: createId(), name, createdAt: now(), pinned: false },
+          { id: action.id ?? createId(), name, createdAt: now(), pinned: false },
         ]),
       };
     }
@@ -218,6 +283,37 @@ export const plannerReducer = (
       };
     }
 
+    case 'ADD_TASK_BATCH': {
+      const drafts = action.drafts
+        .map((draft) => ({
+          title: draft.title.trim(),
+          description: draft.description.trim(),
+          bucketId: draft.bucketId,
+        }))
+        .filter((draft) => Boolean(draft.title));
+
+      if (drafts.length === 0) return state;
+
+      const timestamp = now();
+      return {
+        ...state,
+        tasks: [
+          ...state.tasks,
+          ...drafts.map((draft) => ({
+            id: createId(),
+            title: draft.title,
+            description: draft.description,
+            bucketId: draft.bucketId,
+            pinned: false,
+            completed: false,
+            archivedAt: null,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          })),
+        ],
+      };
+    }
+
     case 'TOGGLE_TASK_PIN':
       return {
         ...state,
@@ -275,6 +371,17 @@ export const plannerReducer = (
         tasks: moveTaskWithOrder(
           state.tasks,
           action.taskId,
+          action.bucketId,
+          action.targetIndex,
+        ),
+      };
+
+    case 'MOVE_TASKS':
+      return {
+        ...state,
+        tasks: moveTasksWithOrder(
+          state.tasks,
+          action.taskIds,
           action.bucketId,
           action.targetIndex,
         ),

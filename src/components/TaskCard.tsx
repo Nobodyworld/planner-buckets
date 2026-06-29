@@ -1,4 +1,4 @@
-import type { DragEvent } from 'react';
+import type { DragEvent, MouseEvent } from 'react';
 import type { PlannerTask } from '../types';
 
 interface TaskCardProps {
@@ -7,6 +7,10 @@ interface TaskCardProps {
   onDelete: () => void;
   onToggle: () => void;
   onTogglePin?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   onCopy?: () => void;
   onAuxAction?: () => void;
   auxActionLabel?: string;
@@ -14,9 +18,11 @@ interface TaskCardProps {
   dragLabel?: string;
   draggable?: boolean;
   isDragging?: boolean;
+  isSelected?: boolean;
   isFreshHighlight?: boolean;
   isUploadedHighlight?: boolean;
   isDropSettled?: boolean;
+  onCardClick?: (event: MouseEvent<HTMLElement>) => void;
   onCardDragOver?: (event: DragEvent<HTMLElement>) => void;
   onCardDrop?: (event: DragEvent<HTMLElement>) => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
@@ -29,6 +35,10 @@ export function TaskCard({
   onDelete,
   onToggle,
   onTogglePin,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
   onCopy,
   onAuxAction,
   auxActionLabel,
@@ -36,9 +46,11 @@ export function TaskCard({
   dragLabel = '⠿',
   draggable = true,
   isDragging = false,
+  isSelected = false,
   isFreshHighlight = false,
   isUploadedHighlight = false,
   isDropSettled = false,
+  onCardClick,
   onCardDragOver,
   onCardDrop,
   onDragStart,
@@ -46,8 +58,9 @@ export function TaskCard({
 }: TaskCardProps) {
   return (
     <article
-      className={`task-card${task.completed ? ' completed' : ''}${isDragging ? ' is-dragging' : ''}${isFreshHighlight ? ' fresh-task-highlight' : ''}${isUploadedHighlight ? ' uploaded-task-highlight' : ''}${isDropSettled ? ' drop-settled' : ''}`}
+      className={`task-card${task.completed ? ' completed' : ''}${isDragging ? ' is-dragging' : ''}${isSelected ? ' is-selected' : ''}${isFreshHighlight ? ' fresh-task-highlight' : ''}${isUploadedHighlight ? ' uploaded-task-highlight' : ''}${isDropSettled ? ' drop-settled' : ''}`}
       draggable={draggable}
+      onClick={onCardClick}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragOver={onCardDragOver}
@@ -72,7 +85,31 @@ export function TaskCard({
       {bucketName && <p className="task-meta">Bucket: {bucketName}</p>}
 
       <div className="task-card-actions">
-        <span className="drag-hint interaction-drag-handle drag-handle" title="Drag to move" aria-label="Drag to move">{dragLabel}</span>
+        <span className="drag-hint interaction-drag-handle drag-handle" title="Drag to move" aria-hidden="true">{dragLabel}</span>
+        {onMoveUp && (
+          <button
+            type="button"
+            className="icon-button task-move-button"
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            title="Move task up"
+            aria-label="Move task up"
+          >
+            ↑
+          </button>
+        )}
+        {onMoveDown && (
+          <button
+            type="button"
+            className="icon-button task-move-button"
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            title="Move task down"
+            aria-label="Move task down"
+          >
+            ↓
+          </button>
+        )}
         {onTogglePin && (
           <button type="button" className={`text-button${task.pinned ? ' is-pinned' : ''}`} onClick={onTogglePin}>
             {task.pinned ? 'Unpin' : 'Pin'}

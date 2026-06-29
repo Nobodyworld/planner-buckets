@@ -4,6 +4,35 @@ A local-first bucket planner built with React, TypeScript, and Vite.
 
 Designed for fast personal planning with zero backend setup.
 
+## License
+
+MIT. See `LICENSE`.
+
+## Screenshots
+
+![Planner overview](docs/images/planner-overview.png)
+
+![Planner detail view: board focus](docs/images/planner-board-focus.png)
+
+![Planner detail view: header](docs/images/planner-header.png)
+
+![Planner detail view: controls strip](docs/images/planner-controls-strip.png)
+
+The gallery includes one full overview image plus focused detail views, all stored in `docs/images/`.
+
+## Architecture
+
+```mermaid
+flowchart LR
+   UI[React UI\nApp + Components] --> Actions[Planner Actions]
+   Actions --> History[Undo/Redo History Wrapper]
+   History --> Reducer[plannerReducer]
+   Reducer --> State[Planner Data\nBuckets + Tasks]
+   State --> Storage[localStorage Persistence]
+   Storage --> ImportExport[JSON Export / Restore / Merge]
+   State --> UI
+```
+
 ## Features
 
 - Task create, edit, delete, and completion
@@ -11,8 +40,11 @@ Designed for fast personal planning with zero backend setup.
 - Permanent Unassigned column
 - Pin tasks to the top of a bucket and pin buckets into the left group
 - Drag tasks between buckets and reorder within each bucket
+- Multi-select tasks with click, Ctrl/Cmd+click, and Shift+click
+- Copy selected tasks and paste them into another bucket
 - Left control panel for task, bucket, and data actions, with autohide and an automatic-open lock
 - Copy an individual task or copy all active tasks in a bucket as an ordered clipboard list
+- Undo and redo across reducer-driven planner actions
 - Search tasks by title/notes
 - Toggle completed task visibility
 - Archive completed tasks
@@ -94,35 +126,12 @@ No data leaves your machine unless you manually export and share JSON.
 - Clipboard copy actions have text labels or descriptive button labels
 - The side panel can autohide; the lock disables automatic opening without preventing manual Show/Hide
 
-## Private GitHub publish checklist
+## Export and history audit notes
 
-1. Ensure local checks pass:
-   - `npm run verify`
-2. Confirm `.gitignore` excludes build/output noise.
-3. Do **not** commit secrets or tokens.
-4. Create a private repository and push:
-
-```bash
-git init
-git add .
-git commit -m "Initial private release"
-git branch -M main
-git remote add origin <your-private-repo-url>
-git push -u origin main
-```
-
-## Public-readiness checklist
-
-When preparing to convert from private to public, complete these first:
-
-1. Review git history for accidental secrets or sensitive data.
-2. Ensure local/export files are excluded (`bucket-planner-*.json`, `.env*`).
-3. Confirm docs are present and accurate:
-   - `README.md`
-   - `CONTRIBUTING.md`
-   - `SECURITY.md`
-4. Confirm CI passes on the default branch (`.github/workflows/ci.yml`).
-5. Decide and add a license file before going public.
+- Export sample files matching `bucket-planner-*.json` are ignored by `.gitignore` and are not currently tracked.
+- Current tracked history is short and readable: initial release, hardening/public-readiness work, and the latest interaction polish commit.
+- The sample JSON schema contains planner content only: bucket/task metadata, completion state, timestamps, and archive state.
+- No credentials or environment secrets are documented in tracked repo files reviewed during this pass.
 
 ## Repository standards
 

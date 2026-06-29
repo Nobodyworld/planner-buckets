@@ -53,6 +53,12 @@ Object.defineProperty(window, 'sessionStorage', {
     configurable: true,
 });
 
+Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    value: () => undefined,
+    writable: true,
+    configurable: true,
+});
+
 afterEach(() => {
     cleanup();
 });

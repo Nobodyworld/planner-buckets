@@ -490,120 +490,62 @@ button {
   gap: 6px;
 }
 
-.quick-task-trigger {
-  position: relative;
-  overflow: hidden;
-  min-height: 42px;
-}
-
-.quick-task-default-label {
-  position: relative;
-  z-index: 2;
-}
-
-.quick-task-animation-layer {
-  position: absolute;
-  inset: 0;
-  display: none;
-}
-
-.quick-fall-text,
-.quick-enter-text,
-.quick-plus-text {
-  position: absolute;
-  inset: 0;
+.quick-task-fields {
   display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-
-.quick-task-inline {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--primary-strong);
-  border-radius: 10px;
-  min-height: 42px;
-  padding: 4px 6px;
-  color: var(--text);
-  background: color-mix(in oklab, var(--surface) 76%, var(--primary) 24%);
-  box-shadow: 0 6px 18px rgba(17, 36, 68, 0.22);
-  animation: quick-inline-reveal var(--anim-quick-reveal) var(--ease-standard);
-}
-
-.quick-task-inline::after {
-  content: "enter";
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  font-weight: 800;
-  font-size: 0.8rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--muted);
-  transform: translate3d(14px, -50%, 0);
-  animation: quick-enter-slide var(--anim-quick-slide) var(--ease-standard);
-  pointer-events: none;
-}
-
-.quick-inline-plus {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--primary);
-  font-size: 0.92rem;
-  font-weight: 800;
-  transform: translate3d(10px, 0, 0);
-  animation: quick-plus-whip var(--anim-quick-slide) var(--ease-whip);
+  gap: calc(10px * var(--space-scale));
 }
 
 .quick-task-input {
-  border: 0;
+  padding-block: calc(10px / var(--density-scale));
+}
+
+.quick-task-input-stack {
+  display: grid;
+  gap: 6px;
   min-width: 0;
-  padding: 6px 0;
-  color: var(--text);
-  background: transparent;
+}
+
+.quick-task-bucket-input {
+  padding-block: calc(10px / var(--density-scale));
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.quick-task-bucket-field {
+  position: relative;
+  min-width: 0;
+}
+
+.quick-task-bucket-ghost {
+  position: absolute;
+  inset: calc(10px / var(--density-scale)) calc(12px / var(--density-scale));
+  z-index: 1;
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  opacity: 0.82;
+}
+
+.quick-task-bucket-ghost-typed {
+  color: transparent;
+}
+
+.quick-task-bucket-ghost-suffix {
+  opacity: 0.88;
 }
 
 .quick-task-input:focus {
-  outline: none;
+  border-color: #4f6ed2;
+  outline: 3px solid rgba(79, 110, 210, 0.15);
 }
 
-.quick-task-mini-button {
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--muted);
-  background: color-mix(in oklab, var(--surface) 88%, transparent);
-  font-size: 0.72rem;
-}
-
-.quick-task-mini-button.active {
-  border-color: var(--primary);
+.quick-task-bucket-input:focus {
+  border-color: #4f6ed2;
+  outline: 3px solid rgba(79, 110, 210, 0.15);
   color: var(--text);
-  background: color-mix(in oklab, var(--surface) 76%, var(--primary) 24%);
-}
-
-.quick-task-note {
-  min-height: 58px;
-  resize: vertical;
-}
-
-.quick-task-hotkeys {
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid var(--popup-border);
-  border-radius: 9px;
-  color: var(--muted);
-  font-size: 0.72rem;
-  background: var(--popup-surface-soft);
 }
 
 .panel-label {
@@ -640,6 +582,18 @@ button {
   justify-content: flex-end;
   gap: 10px;
   margin-bottom: 8px;
+}
+
+.board-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-actions .secondary-button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 0.76rem;
 }
 
 .board-stage-toolbar .sidepanel-toggle {
@@ -1534,6 +1488,13 @@ select:focus {
   cursor: grabbing !important;
 }
 
+.task-card.is-selected {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 2px rgba(79, 110, 210, 0.28),
+    0 14px 28px rgba(17, 36, 68, 0.18);
+}
+
 .task-card.completed {
   opacity: 0.72;
 }
@@ -1561,7 +1522,10 @@ select:focus {
 .text-button:focus-visible,
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
-.add-task-button:focus-visible {
+.add-task-button:focus-visible,
+.add-task-inline-input:focus-visible,
+.add-bucket-inline-input:focus-visible,
+.add-bucket-inline-button:focus-visible {
   outline: 3px solid rgba(79, 110, 210, 0.26);
   outline-offset: 2px;
 }
@@ -1610,6 +1574,7 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
   margin-top: 12px;
 }
 
@@ -1654,6 +1619,30 @@ select:focus {
   text-decoration: underline;
 }
 
+.task-move-button,
+.bucket-move-button {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+}
+
+.task-move-button:disabled,
+.bucket-move-button:disabled {
+  opacity: 0.45;
+}
+
+.task-move-button:hover:not(:disabled),
+.bucket-move-button:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--text);
+  background: color-mix(in oklab, var(--surface) 78%, var(--primary) 22%);
+}
+
 .empty-bucket {
   display: grid;
   min-height: 58px;
@@ -1672,7 +1661,46 @@ select:focus {
   background: transparent;
 }
 
+.add-task-inline-input,
+.add-bucket-inline-input {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid var(--primary-strong);
+  border-radius: 10px;
+  padding: calc(10px / var(--density-scale)) calc(14px / var(--density-scale));
+  color: var(--text);
+  background: color-mix(in oklab, var(--surface) 84%, transparent);
+}
+
+.add-task-inline-input::placeholder,
+.add-bucket-inline-input::placeholder {
+  color: var(--muted);
+}
+
 .add-task-button:hover {
+  border-style: solid;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.board-add-bucket-column {
+  display: grid;
+  align-content: start;
+  min-height: 180px;
+  border-style: dashed;
+}
+
+.add-bucket-inline-button {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px dashed rgba(138, 156, 182, 0.72);
+  border-radius: 10px;
+  padding: calc(10px / var(--density-scale)) calc(14px / var(--density-scale));
+  color: var(--text);
+  font-weight: 700;
+  background: transparent;
+}
+
+.add-bucket-inline-button:hover {
   border-style: solid;
   background: rgba(255, 255, 255, 0.52);
 }
@@ -1792,6 +1820,28 @@ select:focus {
 .archive-list {
   display: grid;
   gap: 10px;
+}
+
+.archive-controls {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+  background: var(--popup-surface-soft);
+}
+
+.archive-controls .secondary-button {
+  justify-self: stretch;
+}
+
+.archive-controls .inline-toggle {
+  font-size: 0.84rem;
+}
+
+.archive-meta {
+  margin-left: 0;
+  font-size: 0.78rem;
 }
 
 .archive-empty {
@@ -2208,6 +2258,22 @@ h1 {
 
 .bucket-drag-handle {
   font-size: 0.95rem;
+  cursor: grab;
+  transition:
+    transform var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
+}
+
+.bucket-drag-handle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px
+    color-mix(in oklab, var(--bucket-accent) 20%, transparent);
+}
+
+.bucket-drag-handle:active {
+  cursor: grabbing;
+  transform: translateY(0);
 }
 
 .bucket-drop-slot {
@@ -2837,10 +2903,52 @@ h1 {
     overflow: visible;
     min-height: 0;
     max-height: none;
+    gap: 10px;
   }
 
   .sidepanel.open {
     max-height: none;
+  }
+
+  .panel-card {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .panel-card h2 {
+    margin-bottom: 2px;
+  }
+
+  .quick-task-fields {
+    gap: 8px;
+  }
+
+  .quick-task-input {
+    font-size: 0.92rem;
+  }
+
+  .quick-task-bucket-input {
+    font-size: 0.78rem;
+  }
+
+  .task-move-button,
+  .bucket-move-button {
+    width: 26px;
+    height: 26px;
+  }
+
+  .task-card-actions {
+    gap: 8px;
+  }
+
+  .bucket-actions {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .data-action-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px;
   }
 
   .sidepanel.collapsed .panel-card {
