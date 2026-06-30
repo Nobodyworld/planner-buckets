@@ -6,6 +6,14 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-30
+
+### Fixed
+
+- Release workflow: removed redundant `npm run build` step (build already included in `npm run verify`).
+
+## [1.0.0] - 2026-06-30
+
 ### Added
 
 - Clipboard copy actions for individual tasks and ordered active task lists per bucket.

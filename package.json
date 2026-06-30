@@ -1,7 +1,7 @@
 {
   "name": "planner-buckets",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "A local-first bucket planner for organizing and copying task lists.",
   "type": "module",
   "engines": {

@@ -29,9 +29,6 @@ jobs:
       - name: Verify
         run: npm run verify
 
-      - name: Build artifact
-        run: npm run build
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
