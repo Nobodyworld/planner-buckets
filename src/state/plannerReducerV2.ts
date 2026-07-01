@@ -1,5 +1,5 @@
 import type { TaskDraft } from '../types';
-import type { BucketV2, PlannerDataV2, PlannerTaskV2, Project } from '../types/v2';
+import type { BucketTemplate, BucketTemplateDefinition, BucketV2, PlannerDataV2, PlannerTaskV2, Project } from '../types/v2';
 import { validatePlannerDataV2Integrity } from '../types/validators';
 
 export type PlannerActionV2 =
@@ -24,6 +24,19 @@ export type PlannerActionV2 =
   | { type: 'MOVE_TASKS'; projectId: string; taskIds: string[]; bucketId: string | null; targetIndex?: number; updatedAt: string }
   | { type: 'ARCHIVE_COMPLETED_TASKS'; projectId: string; archivedAt: string }
   | { type: 'UNARCHIVE_TASK'; projectId: string; taskId: string; updatedAt: string }
+  | { type: 'ADD_TEMPLATE'; template: BucketTemplate }
+  | { type: 'RENAME_TEMPLATE'; templateId: string; name: string; updatedAt: string }
+  | { type: 'UPDATE_TEMPLATE_DESCRIPTION'; templateId: string; description: string; updatedAt: string }
+  | { type: 'SET_TEMPLATE_ACTIVE'; templateId: string; active: boolean; updatedAt: string }
+  | { type: 'MOVE_TEMPLATE'; templateId: string; targetIndex: number }
+  | { type: 'DELETE_TEMPLATE'; templateId: string }
+  | { type: 'ADD_TEMPLATE_DEFINITION'; definition: BucketTemplateDefinition }
+  | { type: 'RENAME_TEMPLATE_DEFINITION'; definitionId: string; name: string; updatedAt: string }
+  | { type: 'UPDATE_TEMPLATE_DEFINITION_DESCRIPTION'; definitionId: string; description: string; updatedAt: string }
+  | { type: 'SET_TEMPLATE_DEFINITION_DEFAULT_ACTIVE'; definitionId: string; defaultActive: boolean; updatedAt: string }
+  | { type: 'MOVE_TEMPLATE_DEFINITION'; definitionId: string; targetIndex: number; updatedAt: string }
+  | { type: 'DELETE_TEMPLATE_DEFINITION'; definitionId: string }
+  | { type: 'APPLY_TEMPLATE'; projectId: string; templateId: string; buckets: BucketV2[] }
   | { type: 'REPLACE_DATA'; data: PlannerDataV2 };
 
 const normalizePinnedOrder = <Item extends { pinned: boolean }>(items: Item[]): Item[] => {
@@ -47,6 +60,57 @@ const areSameIdOrder = <Item extends { id: string }>(left: Item[], right: Item[]
 const areSameReferences = <Item>(left: Item[], right: Item[]): boolean => (
   left.length === right.length && left.every((item, index) => item === right[index])
 );
+
+const moveWithOrder = <Item extends { id: string }>(
+  items: Item[],
+  itemId: string,
+  targetIndex: number,
+): Item[] => {
+  const sourceIndex = items.findIndex((item) => item.id === itemId);
+  if (sourceIndex < 0) return items;
+  const withoutMoved = items.filter((item) => item.id !== itemId);
+  const adjustedTargetIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
+  const safeIndex = Math.max(0, Math.min(adjustedTargetIndex, withoutMoved.length));
+  const nextItems = [
+    ...withoutMoved.slice(0, safeIndex),
+    items[sourceIndex],
+    ...withoutMoved.slice(safeIndex),
+  ];
+
+  return areSameIdOrder(items, nextItems) ? items : nextItems;
+};
+
+const sortDefinitionsForTemplate = (definitions: BucketTemplateDefinition[]): BucketTemplateDefinition[] => (
+  definitions.slice().sort((left, right) => {
+    if (left.position !== right.position) return left.position - right.position;
+    return left.id.localeCompare(right.id);
+  })
+);
+
+const normalizeDefinitionPositions = (
+  definitions: BucketTemplateDefinition[],
+  updatedAt: string,
+): BucketTemplateDefinition[] => definitions.map((definition, index) => (
+  definition.position === index
+    ? definition
+    : { ...definition, position: index, updatedAt }
+));
+
+const templateDefinitionIsReferenced = (state: PlannerDataV2, definitionId: string): boolean => (
+  state.buckets.some((bucket) => bucket.templateDefinitionId === definitionId)
+);
+
+const templateHasReferencedDefinitions = (state: PlannerDataV2, templateId: string): boolean => {
+  const definitionIds = new Set(
+    state.templateDefinitions
+      .filter((definition) => definition.templateId === templateId)
+      .map((definition) => definition.id),
+  );
+
+  return state.buckets.some((bucket) => (
+    bucket.templateDefinitionId !== null && definitionIds.has(bucket.templateDefinitionId)
+  ));
+};
 
 const areSameTaskPositions = (
   left: PlannerTaskV2[],
@@ -561,6 +625,199 @@ export const plannerReducerV2 = (
             }
             : task
         )),
+      };
+    }
+
+    case 'ADD_TEMPLATE': {
+      const name = action.template.name.trim();
+      if (!name) return state;
+      if (hasPlannerDataV2Id(state, action.template.id)) return state;
+      return {
+        ...state,
+        templates: [...state.templates, { ...action.template, name, description: action.template.description.trim() }],
+      };
+    }
+
+    case 'RENAME_TEMPLATE': {
+      const name = action.name.trim();
+      if (!name) return state;
+      const template = state.templates.find((item) => item.id === action.templateId);
+      if (!template || template.name === name) return state;
+      return {
+        ...state,
+        templates: state.templates.map((item) => (
+          item.id === action.templateId
+            ? { ...item, name, updatedAt: action.updatedAt }
+            : item
+        )),
+      };
+    }
+
+    case 'UPDATE_TEMPLATE_DESCRIPTION': {
+      const description = action.description.trim();
+      const template = state.templates.find((item) => item.id === action.templateId);
+      if (!template || template.description === description) return state;
+      return {
+        ...state,
+        templates: state.templates.map((item) => (
+          item.id === action.templateId
+            ? { ...item, description, updatedAt: action.updatedAt }
+            : item
+        )),
+      };
+    }
+
+    case 'SET_TEMPLATE_ACTIVE': {
+      const template = state.templates.find((item) => item.id === action.templateId);
+      if (!template || template.active === action.active) return state;
+      return {
+        ...state,
+        templates: state.templates.map((item) => (
+          item.id === action.templateId
+            ? { ...item, active: action.active, updatedAt: action.updatedAt }
+            : item
+        )),
+      };
+    }
+
+    case 'MOVE_TEMPLATE': {
+      const templates = moveWithOrder(state.templates, action.templateId, action.targetIndex);
+      if (templates === state.templates) return state;
+      return { ...state, templates };
+    }
+
+    case 'DELETE_TEMPLATE': {
+      if (!state.templates.some((template) => template.id === action.templateId)) return state;
+      if (templateHasReferencedDefinitions(state, action.templateId)) return state;
+      return {
+        ...state,
+        templates: state.templates.filter((template) => template.id !== action.templateId),
+        templateDefinitions: state.templateDefinitions.filter((definition) => definition.templateId !== action.templateId),
+      };
+    }
+
+    case 'ADD_TEMPLATE_DEFINITION': {
+      const name = action.definition.name.trim();
+      if (!name) return state;
+      if (hasPlannerDataV2Id(state, action.definition.id)) return state;
+      if (!state.templates.some((template) => template.id === action.definition.templateId)) return state;
+      return {
+        ...state,
+        templateDefinitions: [
+          ...state.templateDefinitions,
+          {
+            ...action.definition,
+            name,
+            description: action.definition.description.trim(),
+          },
+        ],
+      };
+    }
+
+    case 'RENAME_TEMPLATE_DEFINITION': {
+      const name = action.name.trim();
+      if (!name) return state;
+      const definition = state.templateDefinitions.find((item) => item.id === action.definitionId);
+      if (!definition || definition.name === name) return state;
+      return {
+        ...state,
+        templateDefinitions: state.templateDefinitions.map((item) => (
+          item.id === action.definitionId
+            ? { ...item, name, updatedAt: action.updatedAt }
+            : item
+        )),
+      };
+    }
+
+    case 'UPDATE_TEMPLATE_DEFINITION_DESCRIPTION': {
+      const description = action.description.trim();
+      const definition = state.templateDefinitions.find((item) => item.id === action.definitionId);
+      if (!definition || definition.description === description) return state;
+      return {
+        ...state,
+        templateDefinitions: state.templateDefinitions.map((item) => (
+          item.id === action.definitionId
+            ? { ...item, description, updatedAt: action.updatedAt }
+            : item
+        )),
+      };
+    }
+
+    case 'SET_TEMPLATE_DEFINITION_DEFAULT_ACTIVE': {
+      const definition = state.templateDefinitions.find((item) => item.id === action.definitionId);
+      if (!definition || definition.defaultActive === action.defaultActive) return state;
+      return {
+        ...state,
+        templateDefinitions: state.templateDefinitions.map((item) => (
+          item.id === action.definitionId
+            ? { ...item, defaultActive: action.defaultActive, updatedAt: action.updatedAt }
+            : item
+        )),
+      };
+    }
+
+    case 'MOVE_TEMPLATE_DEFINITION': {
+      const definition = state.templateDefinitions.find((item) => item.id === action.definitionId);
+      if (!definition) return state;
+      const sameTemplateDefinitions = sortDefinitionsForTemplate(
+        state.templateDefinitions.filter((item) => item.templateId === definition.templateId),
+      );
+      const movedDefinitions = moveWithOrder(sameTemplateDefinitions, action.definitionId, action.targetIndex);
+      if (movedDefinitions === sameTemplateDefinitions) return state;
+      const normalizedMovedDefinitions = normalizeDefinitionPositions(movedDefinitions, action.updatedAt);
+      const movedDefinitionById = new Map(normalizedMovedDefinitions.map((item) => [item.id, item]));
+
+      return {
+        ...state,
+        templateDefinitions: state.templateDefinitions.map((item) => movedDefinitionById.get(item.id) ?? item),
+      };
+    }
+
+    case 'DELETE_TEMPLATE_DEFINITION': {
+      const definition = state.templateDefinitions.find((item) => item.id === action.definitionId);
+      if (!definition) return state;
+      if (templateDefinitionIsReferenced(state, action.definitionId)) return state;
+      return {
+        ...state,
+        templateDefinitions: state.templateDefinitions.filter((item) => item.id !== action.definitionId),
+      };
+    }
+
+    case 'APPLY_TEMPLATE': {
+      const project = state.projects.find((item) => item.id === action.projectId);
+      const template = state.templates.find((item) => item.id === action.templateId);
+      if (!project || !template || !template.active) return state;
+
+      const eligibleDefinitions = sortDefinitionsForTemplate(
+        state.templateDefinitions.filter((definition) => (
+          definition.templateId === action.templateId && definition.defaultActive
+        )),
+      );
+      const missingDefinitions = eligibleDefinitions.filter((definition) => (
+        !state.buckets.some((bucket) => (
+          bucket.projectId === action.projectId && bucket.templateDefinitionId === definition.id
+        ))
+      ));
+      if (missingDefinitions.length === 0) return state;
+      if (action.buckets.length !== missingDefinitions.length) return state;
+
+      const incomingBucketIds = new Set<string>();
+      for (let index = 0; index < missingDefinitions.length; index += 1) {
+        const definition = missingDefinitions[index];
+        const bucket = action.buckets[index];
+        if (!bucket) return state;
+        if (incomingBucketIds.has(bucket.id) || hasPlannerDataV2Id(state, bucket.id)) return state;
+        if (bucket.projectId !== action.projectId) return state;
+        if (bucket.templateDefinitionId !== definition.id) return state;
+        if (bucket.name !== definition.name) return state;
+        if (bucket.description !== definition.description) return state;
+        if (bucket.priority !== definition.priority) return state;
+        incomingBucketIds.add(bucket.id);
+      }
+
+      return {
+        ...state,
+        buckets: [...state.buckets, ...action.buckets],
       };
     }
 

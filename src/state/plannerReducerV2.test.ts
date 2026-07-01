@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { usePlannerHistory } from '../hooks/usePlannerHistory';
-import type { BucketV2, PlannerDataV2, PlannerTaskV2, Project } from '../types/v2';
+import type { BucketTemplate, BucketTemplateDefinition, BucketV2, PlannerDataV2, PlannerTaskV2, Project } from '../types/v2';
 import { PLANNER_DATA_V2_VERSION } from '../types/v2';
 import { plannerReducerV2, type PlannerActionV2 } from './plannerReducerV2';
 
@@ -44,6 +44,49 @@ const bucket = (id: string, projectId: string, name = id): BucketV2 => ({
   updatedAt: timestamp,
 });
 
+const template = (id: string, name = id, active = true): BucketTemplate => ({
+  id,
+  name,
+  description: '',
+  active,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const definition = (
+  id: string,
+  templateId: string,
+  name = id,
+  position = 0,
+  defaultActive = true,
+): BucketTemplateDefinition => ({
+  id,
+  templateId,
+  name,
+  description: '',
+  priority: 0,
+  defaultActive,
+  position,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const bucketFromDefinition = (
+  id: string,
+  projectId: string,
+  sourceDefinition: BucketTemplateDefinition,
+): BucketV2 => ({
+  id,
+  projectId,
+  name: sourceDefinition.name,
+  description: sourceDefinition.description,
+  templateDefinitionId: sourceDefinition.id,
+  priority: sourceDefinition.priority,
+  pinned: false,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
 const baseState = (): PlannerDataV2 => ({
   version: PLANNER_DATA_V2_VERSION,
   projects: [project('project-a', 'A', true), project('project-b', 'B')],
@@ -74,6 +117,16 @@ const baseState = (): PlannerDataV2 => ({
   tasks: [task('task-a', 'project-a', 'bucket-a'), task('task-b', 'project-b', 'bucket-b')],
   templates: [],
   templateDefinitions: [],
+});
+
+const stateWithTemplate = (): PlannerDataV2 => ({
+  ...baseState(),
+  templates: [template('template-a', 'Launch'), template('template-b', 'Ops')],
+  templateDefinitions: [
+    definition('definition-a', 'template-a', 'Ready', 0, true),
+    definition('definition-b', 'template-a', 'Done', 1, true),
+    definition('definition-c', 'template-a', 'Optional', 2, false),
+  ],
 });
 
 describe('plannerReducerV2', () => {
@@ -315,6 +368,244 @@ describe('plannerReducerV2', () => {
     });
 
     expect(result.current.state).toBe(initialState);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it('supports template CRUD and ordering with semantic no-ops', () => {
+    const created = plannerReducerV2(baseState(), {
+      type: 'ADD_TEMPLATE',
+      template: template('template-a', ' Launch '),
+    });
+    expect(created.templates.map((item) => item.name)).toEqual(['Launch']);
+
+    const renamed = plannerReducerV2(created, {
+      type: 'RENAME_TEMPLATE',
+      templateId: 'template-a',
+      name: 'Release',
+      updatedAt: '2026-07-02T00:00:00.000Z',
+    });
+    expect(renamed.templates[0].name).toBe('Release');
+
+    const described = plannerReducerV2(renamed, {
+      type: 'UPDATE_TEMPLATE_DESCRIPTION',
+      templateId: 'template-a',
+      description: ' Repeatable setup ',
+      updatedAt: '2026-07-03T00:00:00.000Z',
+    });
+    expect(described.templates[0].description).toBe('Repeatable setup');
+
+    const deactivated = plannerReducerV2(described, {
+      type: 'SET_TEMPLATE_ACTIVE',
+      templateId: 'template-a',
+      active: false,
+      updatedAt: '2026-07-04T00:00:00.000Z',
+    });
+    expect(deactivated.templates[0].active).toBe(false);
+
+    expect(plannerReducerV2(deactivated, {
+      type: 'SET_TEMPLATE_ACTIVE',
+      templateId: 'template-a',
+      active: false,
+      updatedAt: timestamp,
+    })).toBe(deactivated);
+
+    const withSecond = plannerReducerV2(deactivated, {
+      type: 'ADD_TEMPLATE',
+      template: template('template-b', 'Ops'),
+    });
+    const moved = plannerReducerV2(withSecond, {
+      type: 'MOVE_TEMPLATE',
+      templateId: 'template-b',
+      targetIndex: 0,
+    });
+    expect(moved.templates.map((item) => item.id)).toEqual(['template-b', 'template-a']);
+    expect(plannerReducerV2(moved, { type: 'MOVE_TEMPLATE', templateId: 'template-b', targetIndex: 0 })).toBe(moved);
+  });
+
+  it('supports definition CRUD, defaultActive, and ordering within one template', () => {
+    const state = stateWithTemplate();
+    const added = plannerReducerV2(state, {
+      type: 'ADD_TEMPLATE_DEFINITION',
+      definition: definition('definition-d', 'template-a', ' Verify ', 3, true),
+    });
+    expect(added.templateDefinitions.find((item) => item.id === 'definition-d')?.name).toBe('Verify');
+
+    const renamed = plannerReducerV2(added, {
+      type: 'RENAME_TEMPLATE_DEFINITION',
+      definitionId: 'definition-d',
+      name: 'Verified',
+      updatedAt: timestamp,
+    });
+    expect(renamed.templateDefinitions.find((item) => item.id === 'definition-d')?.name).toBe('Verified');
+
+    const described = plannerReducerV2(renamed, {
+      type: 'UPDATE_TEMPLATE_DEFINITION_DESCRIPTION',
+      definitionId: 'definition-d',
+      description: ' Checklist ',
+      updatedAt: timestamp,
+    });
+    expect(described.templateDefinitions.find((item) => item.id === 'definition-d')?.description).toBe('Checklist');
+
+    const inactiveDefault = plannerReducerV2(described, {
+      type: 'SET_TEMPLATE_DEFINITION_DEFAULT_ACTIVE',
+      definitionId: 'definition-d',
+      defaultActive: false,
+      updatedAt: timestamp,
+    });
+    expect(inactiveDefault.templateDefinitions.find((item) => item.id === 'definition-d')?.defaultActive).toBe(false);
+
+    const moved = plannerReducerV2(inactiveDefault, {
+      type: 'MOVE_TEMPLATE_DEFINITION',
+      definitionId: 'definition-d',
+      targetIndex: 0,
+      updatedAt: '2026-07-05T00:00:00.000Z',
+    });
+    const orderedDefinitionIds = moved.templateDefinitions
+      .filter((item) => item.templateId === 'template-a')
+      .sort((left, right) => left.position - right.position)
+      .map((item) => item.id);
+    expect(orderedDefinitionIds[0]).toBe('definition-d');
+    expect(moved.templateDefinitions.find((item) => item.id === 'definition-d')?.position).toBe(0);
+  });
+
+  it('rejects referenced definition and template deletion while cascading unreferenced template deletion', () => {
+    const state = stateWithTemplate();
+    const referencedBucket = bucketFromDefinition('bucket-from-definition', 'project-a', state.templateDefinitions[0]);
+    const referencedState: PlannerDataV2 = {
+      ...state,
+      buckets: [...state.buckets, referencedBucket],
+    };
+
+    expect(plannerReducerV2(referencedState, {
+      type: 'DELETE_TEMPLATE_DEFINITION',
+      definitionId: 'definition-a',
+    })).toBe(referencedState);
+    expect(plannerReducerV2(referencedState, {
+      type: 'DELETE_TEMPLATE',
+      templateId: 'template-a',
+    })).toBe(referencedState);
+
+    const removedDefinition = plannerReducerV2(state, {
+      type: 'DELETE_TEMPLATE_DEFINITION',
+      definitionId: 'definition-c',
+    });
+    expect(removedDefinition.templateDefinitions.some((item) => item.id === 'definition-c')).toBe(false);
+
+    const removedTemplate = plannerReducerV2(state, {
+      type: 'DELETE_TEMPLATE',
+      templateId: 'template-a',
+    });
+    expect(removedTemplate.templates.some((item) => item.id === 'template-a')).toBe(false);
+    expect(removedTemplate.templateDefinitions.some((item) => item.templateId === 'template-a')).toBe(false);
+  });
+
+  it('applies active templates to projects and only creates missing default-active buckets on reapply', () => {
+    const state = stateWithTemplate();
+    const [definitionA, definitionB] = state.templateDefinitions;
+    const applied = plannerReducerV2(state, {
+      type: 'APPLY_TEMPLATE',
+      projectId: 'project-a',
+      templateId: 'template-a',
+      buckets: [
+        bucketFromDefinition('bucket-from-a', 'project-a', definitionA),
+        bucketFromDefinition('bucket-from-b', 'project-a', definitionB),
+      ],
+    });
+
+    const appliedTemplateBuckets = applied.buckets.filter((item) => item.templateDefinitionId !== null);
+    expect(appliedTemplateBuckets.map((item) => item.templateDefinitionId)).toEqual(['definition-a', 'definition-b']);
+    expect(appliedTemplateBuckets.map((item) => item.name)).toEqual(['Ready', 'Done']);
+
+    expect(plannerReducerV2(applied, {
+      type: 'APPLY_TEMPLATE',
+      projectId: 'project-a',
+      templateId: 'template-a',
+      buckets: [],
+    })).toBe(applied);
+
+    const partiallyAppliedState: PlannerDataV2 = {
+      ...state,
+      buckets: [...state.buckets, bucketFromDefinition('bucket-from-a', 'project-a', definitionA)],
+    };
+    const partial = plannerReducerV2(partiallyAppliedState, {
+      type: 'APPLY_TEMPLATE',
+      projectId: 'project-a',
+      templateId: 'template-a',
+      buckets: [bucketFromDefinition('bucket-from-b', 'project-a', definitionB)],
+    });
+    expect(partial.buckets.filter((item) => item.templateDefinitionId !== null).map((item) => item.templateDefinitionId)).toEqual(['definition-a', 'definition-b']);
+  });
+
+  it('rejects inactive template application and preserves buckets on template or definition lifecycle changes', () => {
+    const activeState = stateWithTemplate();
+    const referencedBucket = bucketFromDefinition('bucket-from-a', 'project-a', activeState.templateDefinitions[0]);
+    const state: PlannerDataV2 = {
+      ...activeState,
+      buckets: [...activeState.buckets, referencedBucket],
+    };
+    const inactiveTemplateState = plannerReducerV2(state, {
+      type: 'SET_TEMPLATE_ACTIVE',
+      templateId: 'template-a',
+      active: false,
+      updatedAt: timestamp,
+    });
+    expect(inactiveTemplateState.buckets).toBe(state.buckets);
+    expect(plannerReducerV2(inactiveTemplateState, {
+      type: 'APPLY_TEMPLATE',
+      projectId: 'project-a',
+      templateId: 'template-a',
+      buckets: [bucketFromDefinition('bucket-from-b', 'project-a', activeState.templateDefinitions[1])],
+    })).toBe(inactiveTemplateState);
+
+    const defaultInactive = plannerReducerV2(state, {
+      type: 'SET_TEMPLATE_DEFINITION_DEFAULT_ACTIVE',
+      definitionId: 'definition-a',
+      defaultActive: false,
+      updatedAt: timestamp,
+    });
+    expect(defaultInactive.buckets).toBe(state.buckets);
+  });
+
+  it('applies templates as one undoable transition', () => {
+    const state = stateWithTemplate();
+    const { result } = renderHook(() => usePlannerHistory<PlannerDataV2, PlannerActionV2>(state, plannerReducerV2));
+
+    act(() => {
+      result.current.dispatch({
+        type: 'APPLY_TEMPLATE',
+        projectId: 'project-a',
+        templateId: 'template-a',
+        buckets: [
+          bucketFromDefinition('bucket-from-a', 'project-a', state.templateDefinitions[0]),
+          bucketFromDefinition('bucket-from-b', 'project-a', state.templateDefinitions[1]),
+        ],
+      });
+    });
+
+    expect(result.current.state.buckets.filter((item) => item.templateDefinitionId !== null)).toHaveLength(2);
+    expect(result.current.canUndo).toBe(true);
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.state).toBe(state);
+
+    act(() => {
+      result.current.redo();
+    });
+    expect(result.current.state.buckets.filter((item) => item.templateDefinitionId !== null)).toHaveLength(2);
+  });
+
+  it('rejects template and definition global ID collisions without history entries', () => {
+    const state = stateWithTemplate();
+    expect(plannerReducerV2(state, { type: 'ADD_TEMPLATE', template: template('bucket-a') })).toBe(state);
+    expect(plannerReducerV2(state, { type: 'ADD_TEMPLATE_DEFINITION', definition: definition('task-a', 'template-a') })).toBe(state);
+
+    const { result } = renderHook(() => usePlannerHistory<PlannerDataV2, PlannerActionV2>(state, plannerReducerV2));
+    act(() => {
+      result.current.dispatch({ type: 'ADD_TEMPLATE', template: template('project-a') });
+    });
+    expect(result.current.state).toBe(state);
     expect(result.current.canUndo).toBe(false);
   });
 });

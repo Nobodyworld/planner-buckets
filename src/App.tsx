@@ -4,9 +4,11 @@ import { ProjectBoard } from './components/ProjectBoard';
 import { ProjectList } from './components/ProjectList';
 import { TaskCard } from './components/TaskCard';
 import { TaskEditor } from './components/TaskEditor';
+import { TemplateLibrary } from './components/TemplateLibrary';
+import { getGlobalBucketView } from './selectors/globalBucketView';
 import { createId } from './storage/plannerStorage';
 import type { TaskDraft } from './types';
-import type { BucketV2 as Bucket, PlannerDataV2 as PlannerData, PlannerTaskV2 as PlannerTask, Project } from './types/v2';
+import type { BucketTemplate, BucketTemplateDefinition, BucketV2 as Bucket, PlannerDataV2 as PlannerData, PlannerTaskV2 as PlannerTask, Project } from './types/v2';
 import { usePlannerHistory } from './hooks/usePlannerHistory';
 import { usePlannerKeyboardShortcuts } from './hooks/usePlannerKeyboardShortcuts';
 import { savePlannerDataV2ToLocalStorage, loadPlannerDataV2FromLocalStorage } from './services/plannerPersistence';
@@ -110,6 +112,74 @@ const createTask = (projectId: string, draft: TaskDraft, id = createId(), timest
   updatedAt: timestamp,
 });
 
+const plannerHasId = (data: PlannerData, id: string): boolean => (
+  data.projects.some((project) => project.id === id) ||
+  data.buckets.some((bucket) => bucket.id === id) ||
+  data.tasks.some((task) => task.id === id) ||
+  data.templates.some((template) => template.id === id) ||
+  data.templateDefinitions.some((definition) => definition.id === id)
+);
+
+const createUniquePlannerId = (data: PlannerData, reservedIds = new Set<string>()): string => {
+  let id = createId();
+  while (plannerHasId(data, id) || reservedIds.has(id)) {
+    id = createId();
+  }
+  reservedIds.add(id);
+  return id;
+};
+
+const createTemplate = (data: PlannerData, name: string): BucketTemplate => {
+  const timestamp = now();
+  return {
+    id: createUniquePlannerId(data),
+    name: name.trim(),
+    description: '',
+    active: true,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
+const createTemplateDefinition = (
+  data: PlannerData,
+  templateId: string,
+  name: string,
+  position: number,
+): BucketTemplateDefinition => {
+  const timestamp = now();
+  return {
+    id: createUniquePlannerId(data),
+    templateId,
+    name: name.trim(),
+    description: '',
+    priority: 0,
+    defaultActive: true,
+    position,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
+const createBucketFromDefinition = (
+  projectId: string,
+  definition: BucketTemplateDefinition,
+  id: string,
+): Bucket => {
+  const timestamp = now();
+  return {
+    id,
+    projectId,
+    name: definition.name,
+    description: definition.description,
+    templateDefinitionId: definition.id,
+    priority: definition.priority,
+    pinned: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
 
 interface EditorState {
   task: PlannerTask | null;
@@ -153,6 +223,7 @@ export default function App() {
     plannerReducerV2,
   );
   const [activeProjectId, setActiveProjectId] = useState(() => selectInitialProjectId(initialLoadResult.data.projects));
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(() => initialLoadResult.data.templates[0]?.id ?? null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [bucketName, setBucketName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -182,6 +253,7 @@ export default function App() {
   const [hideRestoreUndoCard, setHideRestoreUndoCard] = useState(false);
   const [isRestoreUndoClosing, setIsRestoreUndoClosing] = useState(false);
   const [dataActionMessage, setDataActionMessage] = useState<string | null>(initialLoadResult.warning);
+  const [templateMessage, setTemplateMessage] = useState<string | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showSearchStatus, setShowSearchStatus] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -267,11 +339,17 @@ export default function App() {
     () => state.tasks.filter((task) => task.projectId === effectiveActiveProjectId),
     [effectiveActiveProjectId, state.tasks],
   );
+  const globalBucketGroups = useMemo(() => getGlobalBucketView(state), [state]);
 
   useEffect(() => {
     if (state.projects.some((project) => project.id === activeProjectId)) return;
     setActiveProjectId(selectInitialProjectId(state.projects));
   }, [activeProjectId, state.projects]);
+
+  useEffect(() => {
+    if (selectedTemplateId && state.templates.some((template) => template.id === selectedTemplateId)) return;
+    setSelectedTemplateId(state.templates[0]?.id ?? null);
+  }, [selectedTemplateId, state.templates]);
 
   useEffect(() => {
     try {
@@ -490,6 +568,142 @@ export default function App() {
       confirmLabel: 'Delete project',
       action: { type: 'delete-project', projectId: project.id },
     });
+  };
+
+  const getDefinitionsForTemplate = (templateId: string) => state.templateDefinitions
+    .filter((definition) => definition.templateId === templateId)
+    .slice()
+    .sort((left, right) => left.position - right.position || left.id.localeCompare(right.id));
+
+  const templateDefinitionIsReferenced = (definitionId: string) => (
+    state.buckets.some((bucket) => bucket.templateDefinitionId === definitionId)
+  );
+
+  const templateHasReferencedDefinitions = (templateId: string) => {
+    const definitionIds = new Set(getDefinitionsForTemplate(templateId).map((definition) => definition.id));
+    return state.buckets.some((bucket) => (
+      bucket.templateDefinitionId !== null && definitionIds.has(bucket.templateDefinitionId)
+    ));
+  };
+
+  const addTemplate = (name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    const template = createTemplate(state, trimmedName);
+    dispatchPlanner({ type: 'ADD_TEMPLATE', template });
+    setSelectedTemplateId(template.id);
+    setTemplateMessage(`Created template ${template.name}.`);
+  };
+
+  const renameTemplate = (templateId: string, name: string) => {
+    dispatchPlanner({ type: 'RENAME_TEMPLATE', templateId, name, updatedAt: now() });
+  };
+
+  const updateTemplateDescription = (templateId: string, description: string) => {
+    dispatchPlanner({ type: 'UPDATE_TEMPLATE_DESCRIPTION', templateId, description, updatedAt: now() });
+  };
+
+  const setTemplateActive = (templateId: string, active: boolean) => {
+    dispatchPlanner({ type: 'SET_TEMPLATE_ACTIVE', templateId, active, updatedAt: now() });
+    setTemplateMessage(active ? 'Template activated.' : 'Template deactivated. Existing project buckets were unchanged.');
+  };
+
+  const moveTemplateByOffset = (templateId: string, offset: -1 | 1) => {
+    const sourceIndex = state.templates.findIndex((template) => template.id === templateId);
+    if (sourceIndex < 0) return;
+    const targetIndex = Math.max(0, Math.min(state.templates.length - 1, sourceIndex + offset));
+    dispatchPlanner({ type: 'MOVE_TEMPLATE', templateId, targetIndex });
+  };
+
+  const deleteTemplate = (templateId: string) => {
+    if (templateHasReferencedDefinitions(templateId)) {
+      setTemplateMessage('Template deletion blocked because project buckets still reference one or more definitions.');
+      return;
+    }
+    dispatchPlanner({ type: 'DELETE_TEMPLATE', templateId });
+    setTemplateMessage('Template deleted.');
+  };
+
+  const addTemplateDefinition = (templateId: string, name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    const existingDefinitions = getDefinitionsForTemplate(templateId);
+    const nextPosition = existingDefinitions.length === 0
+      ? 0
+      : Math.max(...existingDefinitions.map((definition) => definition.position)) + 1;
+    dispatchPlanner({
+      type: 'ADD_TEMPLATE_DEFINITION',
+      definition: createTemplateDefinition(state, templateId, trimmedName, nextPosition),
+    });
+    setTemplateMessage('Definition added.');
+  };
+
+  const renameTemplateDefinition = (definitionId: string, name: string) => {
+    dispatchPlanner({ type: 'RENAME_TEMPLATE_DEFINITION', definitionId, name, updatedAt: now() });
+  };
+
+  const updateTemplateDefinitionDescription = (definitionId: string, description: string) => {
+    dispatchPlanner({ type: 'UPDATE_TEMPLATE_DEFINITION_DESCRIPTION', definitionId, description, updatedAt: now() });
+  };
+
+  const setTemplateDefinitionDefaultActive = (definitionId: string, defaultActive: boolean) => {
+    dispatchPlanner({ type: 'SET_TEMPLATE_DEFINITION_DEFAULT_ACTIVE', definitionId, defaultActive, updatedAt: now() });
+    setTemplateMessage('Definition default changed. Existing project buckets were unchanged.');
+  };
+
+  const moveTemplateDefinitionByOffset = (definitionId: string, offset: -1 | 1) => {
+    const definition = state.templateDefinitions.find((item) => item.id === definitionId);
+    if (!definition) return;
+    const definitions = getDefinitionsForTemplate(definition.templateId);
+    const sourceIndex = definitions.findIndex((item) => item.id === definitionId);
+    if (sourceIndex < 0) return;
+    const targetIndex = Math.max(0, Math.min(definitions.length - 1, sourceIndex + offset));
+    dispatchPlanner({ type: 'MOVE_TEMPLATE_DEFINITION', definitionId, targetIndex, updatedAt: now() });
+  };
+
+  const deleteTemplateDefinition = (definitionId: string) => {
+    if (templateDefinitionIsReferenced(definitionId)) {
+      setTemplateMessage('Definition deletion blocked because project buckets still reference it.');
+      return;
+    }
+    dispatchPlanner({ type: 'DELETE_TEMPLATE_DEFINITION', definitionId });
+    setTemplateMessage('Definition deleted.');
+  };
+
+  const applyTemplateToActiveProject = (templateId: string) => {
+    if (!effectiveActiveProjectId) return;
+    const template = state.templates.find((item) => item.id === templateId);
+    if (!template) return;
+    if (!template.active) {
+      setTemplateMessage('Inactive templates cannot be applied.');
+      return;
+    }
+
+    const eligibleDefinitions = getDefinitionsForTemplate(templateId).filter((definition) => definition.defaultActive);
+    const missingDefinitions = eligibleDefinitions.filter((definition) => (
+      !state.buckets.some((bucket) => (
+        bucket.projectId === effectiveActiveProjectId && bucket.templateDefinitionId === definition.id
+      ))
+    ));
+
+    if (missingDefinitions.length === 0) {
+      setTemplateMessage('No new buckets were created; all active definitions already exist in this project.');
+      dispatchPlanner({ type: 'APPLY_TEMPLATE', projectId: effectiveActiveProjectId, templateId, buckets: [] });
+      return;
+    }
+
+    const reservedIds = new Set<string>();
+    const buckets = missingDefinitions.map((definition) => (
+      createBucketFromDefinition(effectiveActiveProjectId, definition, createUniquePlannerId(state, reservedIds))
+    ));
+
+    dispatchPlanner({ type: 'APPLY_TEMPLATE', projectId: effectiveActiveProjectId, templateId, buckets });
+    setPendingBucketWarp(true);
+    setTemplateMessage(
+      missingDefinitions.length === eligibleDefinitions.length
+        ? `Applied ${missingDefinitions.length} bucket definition${missingDefinitions.length === 1 ? '' : 's'} to ${activeProject.name}.`
+        : `Applied ${missingDefinitions.length} of ${eligibleDefinitions.length} eligible bucket definitions to ${activeProject.name}.`,
+    );
   };
 
   const addBucket = () => {
@@ -1627,6 +1841,28 @@ export default function App() {
               onToggleProjectPin={toggleProjectPin}
               onMoveProject={moveProjectByOffset}
               onDeleteProject={deleteProject}
+            />
+            <TemplateLibrary
+              templates={state.templates}
+              definitions={state.templateDefinitions}
+              selectedTemplateId={selectedTemplateId}
+              activeProjectName={activeProject.name}
+              message={templateMessage}
+              globalGroups={globalBucketGroups}
+              onSelectTemplate={setSelectedTemplateId}
+              onCreateTemplate={addTemplate}
+              onRenameTemplate={renameTemplate}
+              onUpdateTemplateDescription={updateTemplateDescription}
+              onSetTemplateActive={setTemplateActive}
+              onMoveTemplate={moveTemplateByOffset}
+              onDeleteTemplate={deleteTemplate}
+              onCreateDefinition={addTemplateDefinition}
+              onRenameDefinition={renameTemplateDefinition}
+              onUpdateDefinitionDescription={updateTemplateDefinitionDescription}
+              onSetDefinitionDefaultActive={setTemplateDefinitionDefaultActive}
+              onMoveDefinition={moveTemplateDefinitionByOffset}
+              onDeleteDefinition={deleteTemplateDefinition}
+              onApplyTemplate={applyTemplateToActiveProject}
             />
             <section className="panel-card">
               <h2>Tasks</h2>
