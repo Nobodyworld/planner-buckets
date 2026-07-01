@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
-import type { Bucket, PlannerTask } from '../types';
+import type { BucketV2 as Bucket, PlannerTaskV2 as PlannerTask } from '../types/v2';
 import { TaskCard } from './TaskCard';
 
 interface BucketColumnProps {

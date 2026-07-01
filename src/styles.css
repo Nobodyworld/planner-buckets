@@ -3017,3 +3017,40 @@ h1 {
     scroll-behavior: auto !important;
   }
 }
+
+.project-list {
+  display: grid;
+  gap: 10px;
+}
+
+.project-list-header,
+.project-row-actions,
+.project-create-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-list-header {
+  justify-content: space-between;
+}
+
+.project-select-label,
+.project-edit-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.project-row-actions {
+  flex-wrap: wrap;
+}
+
+.project-edit-grid textarea {
+  min-height: 54px;
+  resize: vertical;
+}
+
+.project-create-row input {
+  min-width: 0;
+  flex: 1;
+}

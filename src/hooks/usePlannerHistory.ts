@@ -1,24 +1,26 @@
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useMemo } from 'react';
 import type { PlannerData } from '../types';
 import type { PlannerAction } from '../state/plannerReducer';
 import { plannerReducer } from '../state/plannerReducer';
 
 const HISTORY_LIMIT = 200;
 
+type Reducer<State, Action> = (state: State, action: Action) => State;
+
 /**
  * Internal history state for undo/redo.
  */
-interface PlannerHistoryState {
-    past: PlannerData[];
-    present: PlannerData;
-    future: PlannerData[];
+interface PlannerHistoryState<State> {
+    past: State[];
+    present: State;
+    future: State[];
 }
 
 /**
  * Actions for the history reducer.
  */
-type PlannerHistoryAction =
-    | { type: 'APPLY'; action: PlannerAction }
+type PlannerHistoryAction<Action> =
+    | { type: 'APPLY'; action: Action }
     | { type: 'UNDO' }
     | { type: 'REDO' };
 
@@ -26,13 +28,13 @@ type PlannerHistoryAction =
  * Pure reducer for history state management.
  * Maintains a stack of past states and future states for undo/redo.
  */
-const plannerHistoryReducer = (
-    state: PlannerHistoryState,
-    action: PlannerHistoryAction,
-): PlannerHistoryState => {
+const createPlannerHistoryReducer = <State, Action>(reducer: Reducer<State, Action>) => (
+    state: PlannerHistoryState<State>,
+    action: PlannerHistoryAction<Action>,
+): PlannerHistoryState<State> => {
     switch (action.type) {
         case 'APPLY': {
-            const nextPresent = plannerReducer(state.present, action.action);
+            const nextPresent = reducer(state.present, action.action);
             // If no change, return current state
             if (nextPresent === state.present) return state;
 
@@ -79,14 +81,18 @@ const plannerHistoryReducer = (
  * @param initialState - Initial planner data state
  * @returns [currentState, dispatch, { canUndo, canRedo, undo, redo }]
  */
-export const usePlannerHistory = (initialState: PlannerData) => {
-    const [historyState, dispatchHistory] = useReducer(plannerHistoryReducer, {
+export const usePlannerHistory = <State = PlannerData, Action = PlannerAction>(
+    initialState: State,
+    reducer: Reducer<State, Action> = plannerReducer as unknown as Reducer<State, Action>,
+) => {
+    const historyReducer = useMemo(() => createPlannerHistoryReducer(reducer), [reducer]);
+    const [historyState, dispatchHistory] = useReducer(historyReducer, {
         past: [],
         present: initialState,
         future: [],
     });
 
-    const dispatch = useCallback((action: PlannerAction) => {
+    const dispatch = useCallback((action: Action) => {
         dispatchHistory({ type: 'APPLY', action });
     }, []);
 
