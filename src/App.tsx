@@ -1,16 +1,24 @@
-import { Fragment, useEffect, useMemo, useReducer, useRef, useState, type ChangeEvent, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { BucketColumn } from './components/BucketColumn';
 import { TaskCard } from './components/TaskCard';
 import { TaskEditor } from './components/TaskEditor';
-import { plannerReducer, type PlannerAction } from './state/plannerReducer';
+import type { PlannerAction } from './state/plannerReducer';
 import {
   createId,
   isPlannerData,
-  loadPlannerData,
   normalizePlannerData,
-  savePlannerData,
 } from './storage/plannerStorage';
 import type { Bucket, PlannerData, PlannerTask, TaskDraft } from './types';
+import { usePlannerHistory } from './hooks/usePlannerHistory';
+import { usePlannerKeyboardShortcuts } from './hooks/usePlannerKeyboardShortcuts';
+import { saveToLocalStorage, loadFromLocalStorage } from './services/plannerPersistence';
+import {
+  copyTextToClipboard,
+  formatTaskChecklistLabel,
+  formatTaskForOrderedCopy,
+  formatTaskForSingleCopy,
+} from './services/plannerClipboard';
+import { mergeUploadedPlannerData } from './services/plannerImport';
 
 const accentIndexFromBucket = (bucketId: string | null) => {
   if (!bucketId) return 0;
@@ -44,151 +52,6 @@ const QUICK_TASK_BUCKET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _-]*$/;
 
 const normalizeBucketName = (name: string) => name.trim().toLowerCase();
 
-const createTaskDuplicateKey = (
-  task: Pick<PlannerTask, 'title' | 'description'>,
-  bucketId: string | null,
-) => `${bucketId ?? 'unassigned'}::${task.title.trim().toLowerCase()}::${task.description.trim().toLowerCase()}`;
-
-const formatTaskNoteForCopy = (description: string, prefix = '') => (
-  description
-    .trim()
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => `${prefix}${line}`)
-    .join('\n')
-);
-
-const formatTaskChecklistLabel = (task: PlannerTask) => (
-  `${task.completed ? '[x]' : '[ ]'} ${task.title.trim() || 'Untitled task'}`
-);
-
-const formatTaskForOrderedCopy = (task: PlannerTask, index: number) => {
-  const lines = [`${index + 1}. ${formatTaskChecklistLabel(task)}`];
-  const note = formatTaskNoteForCopy(task.description, '   Note: ');
-
-  if (note) {
-    lines.push(note);
-  }
-
-  return lines.join('\n');
-};
-
-const formatTaskForSingleCopy = (task: PlannerTask, bucketName: string) => {
-  const lines = [formatTaskChecklistLabel(task), `Bucket: ${bucketName}`];
-  const note = formatTaskNoteForCopy(task.description, 'Note: ');
-
-  if (note) {
-    lines.push(note);
-  }
-
-  return lines.join('\n');
-};
-
-const copyTextToClipboard = async (text: string) => {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-  } catch {
-    // Fall through to the legacy clipboard path below.
-  }
-
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  textArea.setAttribute('readonly', 'true');
-  textArea.style.position = 'fixed';
-  textArea.style.left = '-9999px';
-  textArea.style.top = '0';
-  document.body.appendChild(textArea);
-  textArea.select();
-
-  const copied = document.execCommand('copy');
-  document.body.removeChild(textArea);
-
-  if (!copied) {
-    throw new Error('Clipboard copy failed');
-  }
-};
-
-const mergeUploadedPlannerData = (current: PlannerData, incoming: PlannerData) => {
-  const bucketIdMap = new Map<string, string | null>();
-  const bucketsByName = new Map<string, Bucket>();
-
-  current.buckets.forEach((bucket) => {
-    bucketsByName.set(normalizeBucketName(bucket.name), bucket);
-  });
-
-  const mergedBuckets = [...current.buckets];
-  let createdBucketCount = 0;
-  let mergedIntoExistingBucketCount = 0;
-
-  incoming.buckets.forEach((bucket) => {
-    const normalizedName = normalizeBucketName(bucket.name) || 'untitled bucket';
-    const existingBucket = bucketsByName.get(normalizedName) ?? null;
-
-    if (existingBucket) {
-      bucketIdMap.set(bucket.id, existingBucket.id);
-      mergedIntoExistingBucketCount += 1;
-      return;
-    }
-
-    const mergedBucket: Bucket = {
-      ...bucket,
-      id: createId(),
-      name: bucket.name.trim() || 'Untitled bucket',
-    };
-
-    bucketIdMap.set(bucket.id, mergedBucket.id);
-    bucketsByName.set(normalizedName, mergedBucket);
-    mergedBuckets.push(mergedBucket);
-    createdBucketCount += 1;
-  });
-
-  const existingTaskKeys = new Set(
-    current.tasks.map((task) => createTaskDuplicateKey(task, task.bucketId)),
-  );
-  const mergedTasks = [...current.tasks];
-  const uploadedTaskIds: string[] = [];
-  let skippedDuplicateCount = 0;
-
-  incoming.tasks.forEach((task) => {
-    const mergedBucketId = task.bucketId
-      ? bucketIdMap.get(task.bucketId) ?? null
-      : null;
-    const duplicateKey = createTaskDuplicateKey(task, mergedBucketId);
-
-    if (existingTaskKeys.has(duplicateKey)) {
-      skippedDuplicateCount += 1;
-      return;
-    }
-
-    const uploadedTask: PlannerTask = {
-      ...task,
-      id: createId(),
-      bucketId: mergedBucketId,
-      title: task.title.trim() || 'Untitled task',
-      description: task.description.trim(),
-    };
-
-    mergedTasks.push(uploadedTask);
-    uploadedTaskIds.push(uploadedTask.id);
-    existingTaskKeys.add(duplicateKey);
-  });
-
-  return {
-    data: {
-      version: current.version,
-      buckets: mergedBuckets,
-      tasks: mergedTasks,
-    },
-    createdBucketCount,
-    mergedIntoExistingBucketCount,
-    skippedDuplicateCount,
-    uploadedTaskIds,
-  };
-};
 
 interface EditorState {
   task: PlannerTask | null;
@@ -223,73 +86,10 @@ const MAX_BOARD_ZOOM_INDEX = 4;
 const APP_NAME = 'Buckets & Shovels Planner';
 const APP_BANNER = 'B.S. Planner';
 const APP_ICON_TEXT = 'BSP';
-const HISTORY_LIMIT = 200;
-
-interface PlannerHistoryState {
-  past: PlannerData[];
-  present: PlannerData;
-  future: PlannerData[];
-}
-
-type PlannerHistoryAction =
-  | { type: 'APPLY'; action: PlannerAction }
-  | { type: 'UNDO' }
-  | { type: 'REDO' };
-
-const createInitialPlannerHistory = (): PlannerHistoryState => ({
-  past: [],
-  present: loadPlannerData(),
-  future: [],
-});
-
-const plannerHistoryReducer = (
-  state: PlannerHistoryState,
-  action: PlannerHistoryAction,
-): PlannerHistoryState => {
-  switch (action.type) {
-    case 'APPLY': {
-      const nextPresent = plannerReducer(state.present, action.action);
-      if (nextPresent === state.present) return state;
-
-      const nextPast = state.past.length >= HISTORY_LIMIT
-        ? [...state.past.slice(1), state.present]
-        : [...state.past, state.present];
-
-      return {
-        past: nextPast,
-        present: nextPresent,
-        future: [],
-      };
-    }
-
-    case 'UNDO': {
-      if (state.past.length === 0) return state;
-      const previous = state.past[state.past.length - 1];
-      return {
-        past: state.past.slice(0, -1),
-        present: previous,
-        future: [state.present, ...state.future],
-      };
-    }
-
-    case 'REDO': {
-      if (state.future.length === 0) return state;
-      const [next, ...remainingFuture] = state.future;
-      return {
-        past: [...state.past, state.present],
-        present: next,
-        future: remainingFuture,
-      };
-    }
-
-    default:
-      return state;
-  }
-};
 
 export default function App() {
-  const [historyState, dispatchHistory] = useReducer(plannerHistoryReducer, undefined, createInitialPlannerHistory);
-  const state = historyState.present;
+  const initialState = loadFromLocalStorage();
+  const { state, dispatch: dispatchPlanner, canUndo, canRedo, undo, redo } = usePlannerHistory(initialState);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [bucketName, setBucketName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -388,16 +188,10 @@ export default function App() {
   const sidepanelToggleTitle = isSidepanelOpen
     ? 'Click to collapse controls'
     : 'Click to open controls';
-  const canUndo = historyState.past.length > 0;
-  const canRedo = historyState.future.length > 0;
-
-  const dispatchPlanner = (action: PlannerAction) => {
-    dispatchHistory({ type: 'APPLY', action });
-  };
 
   useEffect(() => {
     try {
-      savePlannerData(state);
+      saveToLocalStorage(state);
       setStatus('Saved locally');
     } catch {
       setStatus('Could not save locally');
@@ -1216,29 +1010,6 @@ export default function App() {
       if (!withMeta) return;
 
       const key = event.key.toLowerCase();
-      if (key === 'z' && event.shiftKey) {
-        if (!canRedo) return;
-        event.preventDefault();
-        dispatchHistory({ type: 'REDO' });
-        showTemporaryStatus('Redo');
-        return;
-      }
-
-      if (key === 'z') {
-        if (!canUndo) return;
-        event.preventDefault();
-        dispatchHistory({ type: 'UNDO' });
-        showTemporaryStatus('Undo');
-        return;
-      }
-
-      if (key === 'y') {
-        if (!canRedo) return;
-        event.preventDefault();
-        dispatchHistory({ type: 'REDO' });
-        showTemporaryStatus('Redo');
-        return;
-      }
 
       if (key === 'c' && selectedTaskIds.length > 0) {
         event.preventDefault();
@@ -1256,7 +1027,29 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [activePasteBucketId, canRedo, canUndo, selectedTaskIds.length, taskClipboard, state.tasks, selectedTaskIdSet]);
+  }, [activePasteBucketId, selectedTaskIds.length, taskClipboard, state.tasks, selectedTaskIdSet]);
+
+  // Keyboard shortcuts for undo/redo, copy/paste
+  usePlannerKeyboardShortcuts({
+    onUndo: () => {
+      if (!canUndo) return;
+      undo();
+      showTemporaryStatus('Undo');
+    },
+    onRedo: () => {
+      if (!canRedo) return;
+      redo();
+      showTemporaryStatus('Redo');
+    },
+    onCopy: () => {
+      if (selectedTaskIds.length === 0) return;
+      copySelectedTasks();
+    },
+    onPaste: () => {
+      if (taskClipboard.length === 0) return;
+      pasteTasksIntoBucket(activePasteBucketId);
+    },
+  });
 
   useEffect(() => {
     if (isSearchFocused || searchQuery.trim()) {
@@ -1596,7 +1389,7 @@ export default function App() {
               <button
                 type="button"
                 className="icon-button"
-                onClick={() => dispatchHistory({ type: 'UNDO' })}
+                onClick={undo}
                 disabled={!canUndo}
                 aria-label="Undo"
                 title="Undo (Ctrl/Cmd+Z)"
@@ -1606,7 +1399,7 @@ export default function App() {
               <button
                 type="button"
                 className="icon-button"
-                onClick={() => dispatchHistory({ type: 'REDO' })}
+                onClick={redo}
                 disabled={!canRedo}
                 aria-label="Redo"
                 title="Redo (Ctrl/Cmd+Y)"
