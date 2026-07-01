@@ -1,24 +1,24 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { BucketColumn } from './components/BucketColumn';
+import { ProjectBoard } from './components/ProjectBoard';
+import { ProjectList } from './components/ProjectList';
 import { TaskCard } from './components/TaskCard';
 import { TaskEditor } from './components/TaskEditor';
-import type { PlannerAction } from './state/plannerReducer';
-import {
-  createId,
-  isPlannerData,
-  normalizePlannerData,
-} from './storage/plannerStorage';
-import type { Bucket, PlannerData, PlannerTask, TaskDraft } from './types';
+import { createId } from './storage/plannerStorage';
+import type { TaskDraft } from './types';
+import type { BucketV2 as Bucket, PlannerDataV2 as PlannerData, PlannerTaskV2 as PlannerTask, Project } from './types/v2';
 import { usePlannerHistory } from './hooks/usePlannerHistory';
 import { usePlannerKeyboardShortcuts } from './hooks/usePlannerKeyboardShortcuts';
-import { saveToLocalStorage, loadFromLocalStorage } from './services/plannerPersistence';
+import { savePlannerDataV2ToLocalStorage, loadPlannerDataV2FromLocalStorage } from './services/plannerPersistence';
+import { plannerReducerV2, type PlannerActionV2 } from './state/plannerReducerV2';
 import {
   copyTextToClipboard,
   formatTaskChecklistLabel,
   formatTaskForOrderedCopy,
   formatTaskForSingleCopy,
 } from './services/plannerClipboard';
-import { mergeUploadedPlannerData } from './services/plannerImport';
+import { coercePlannerDataToV2, mergeUploadedPlannerDataV2 } from './services/plannerImport';
+import { isValidPlannerDataV2 } from './types/validators';
 
 const accentIndexFromBucket = (bucketId: string | null) => {
   if (!bucketId) return 0;
@@ -52,6 +52,64 @@ const QUICK_TASK_BUCKET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _-]*$/;
 
 const normalizeBucketName = (name: string) => name.trim().toLowerCase();
 
+const now = (): string => new Date().toISOString();
+
+const selectInitialProjectId = (projects: Project[]): string => (
+  projects.find((project) => project.pinned)?.id ?? projects[0]?.id ?? ''
+);
+
+const selectNearestProjectIdAfterDeletion = (projects: Project[], deletedProjectId: string): string => {
+  const sourceIndex = projects.findIndex((project) => project.id === deletedProjectId);
+  const remainingProjects = projects.filter((project) => project.id !== deletedProjectId);
+  if (remainingProjects.length === 0) return '';
+  if (sourceIndex < 0) return selectInitialProjectId(remainingProjects);
+  const targetIndex = Math.max(0, Math.min(sourceIndex, remainingProjects.length - 1));
+  return remainingProjects[targetIndex]?.id ?? remainingProjects[0].id;
+};
+
+const createProject = (name: string): Project => {
+  const timestamp = now();
+  return {
+    id: createId(),
+    name: name.trim(),
+    description: '',
+    priority: 0,
+    pinned: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
+const createBucket = (projectId: string, name: string, id = createId()): Bucket => {
+  const timestamp = now();
+  return {
+    id,
+    projectId,
+    name: name.trim(),
+    description: '',
+    templateDefinitionId: null,
+    priority: 0,
+    pinned: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
+const createTask = (projectId: string, draft: TaskDraft, id = createId(), timestamp = now()): PlannerTask => ({
+  id,
+  projectId,
+  title: draft.title.trim(),
+  description: draft.description.trim(),
+  bucketId: draft.bucketId,
+  priority: 0,
+  resourceTags: [],
+  pinned: false,
+  completed: false,
+  archivedAt: null,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
 
 interface EditorState {
   task: PlannerTask | null;
@@ -60,7 +118,8 @@ interface EditorState {
 
 type ConfirmDialogAction =
   | { type: 'delete-task'; taskId: string }
-  | { type: 'delete-bucket'; bucketId: string };
+  | { type: 'delete-bucket'; bucketId: string }
+  | { type: 'delete-project'; projectId: string };
 
 interface ConfirmDialogState {
   title: string;
@@ -88,8 +147,12 @@ const APP_BANNER = 'B.S. Planner';
 const APP_ICON_TEXT = 'BSP';
 
 export default function App() {
-  const initialState = loadFromLocalStorage();
-  const { state, dispatch: dispatchPlanner, canUndo, canRedo, undo, redo } = usePlannerHistory(initialState);
+  const [initialLoadResult] = useState(() => loadPlannerDataV2FromLocalStorage());
+  const { state, dispatch: dispatchPlanner, canUndo, canRedo, undo, redo } = usePlannerHistory<PlannerData, PlannerActionV2>(
+    initialLoadResult.data,
+    plannerReducerV2,
+  );
+  const [activeProjectId, setActiveProjectId] = useState(() => selectInitialProjectId(initialLoadResult.data.projects));
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [bucketName, setBucketName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -118,7 +181,7 @@ export default function App() {
   const [boardBucketNameDraft, setBoardBucketNameDraft] = useState('');
   const [hideRestoreUndoCard, setHideRestoreUndoCard] = useState(false);
   const [isRestoreUndoClosing, setIsRestoreUndoClosing] = useState(false);
-  const [dataActionMessage, setDataActionMessage] = useState<string | null>(null);
+  const [dataActionMessage, setDataActionMessage] = useState<string | null>(initialLoadResult.warning);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showSearchStatus, setShowSearchStatus] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -189,9 +252,30 @@ export default function App() {
     ? 'Click to collapse controls'
     : 'Click to open controls';
 
+  const activeProject = useMemo(
+    () => state.projects.find((project) => project.id === activeProjectId)
+      ?? state.projects.find((project) => project.pinned)
+      ?? state.projects[0],
+    [activeProjectId, state.projects],
+  );
+  const effectiveActiveProjectId = activeProject?.id ?? '';
+  const activeBuckets = useMemo(
+    () => state.buckets.filter((bucket) => bucket.projectId === effectiveActiveProjectId),
+    [effectiveActiveProjectId, state.buckets],
+  );
+  const activeTasks = useMemo(
+    () => state.tasks.filter((task) => task.projectId === effectiveActiveProjectId),
+    [effectiveActiveProjectId, state.tasks],
+  );
+
+  useEffect(() => {
+    if (state.projects.some((project) => project.id === activeProjectId)) return;
+    setActiveProjectId(selectInitialProjectId(state.projects));
+  }, [activeProjectId, state.projects]);
+
   useEffect(() => {
     try {
-      saveToLocalStorage(state);
+      savePlannerDataV2ToLocalStorage(state);
       setStatus('Saved locally');
     } catch {
       setStatus('Could not save locally');
@@ -244,9 +328,9 @@ export default function App() {
   const tasksByBucket = useMemo(() => {
     const map = new Map<string | null, PlannerTask[]>();
     map.set(null, []);
-    state.buckets.forEach((bucket) => map.set(bucket.id, []));
+    activeBuckets.forEach((bucket) => map.set(bucket.id, []));
 
-    state.tasks
+    activeTasks
       .filter((task) => !task.archivedAt)
       .forEach((task) => {
         const key = map.has(task.bucketId) ? task.bucketId : null;
@@ -263,15 +347,17 @@ export default function App() {
     });
 
     return map;
-  }, [state]);
+  }, [activeBuckets, activeTasks]);
 
   const saveTask = (draft: TaskDraft) => {
-    if (!editor) return;
+    if (!editor || !effectiveActiveProjectId) return;
+
+    const updatedAt = now();
 
     if (editor.task) {
-      dispatchPlanner({ type: 'UPDATE_TASK', taskId: editor.task.id, draft });
+      dispatchPlanner({ type: 'UPDATE_TASK', projectId: editor.task.projectId, taskId: editor.task.id, draft, updatedAt });
     } else {
-      dispatchPlanner({ type: 'ADD_TASK', draft });
+      dispatchPlanner({ type: 'ADD_TASK', task: createTask(effectiveActiveProjectId, draft, createId(), updatedAt) });
     }
     setEditor(null);
   };
@@ -302,11 +388,11 @@ export default function App() {
   const orderedVisibleTaskIds = useMemo(() => {
     const ordered: string[] = [];
     (filteredTasksByBucket.get(null) ?? []).forEach((task) => ordered.push(task.id));
-    state.buckets.forEach((bucket) => {
+    activeBuckets.forEach((bucket) => {
       (filteredTasksByBucket.get(bucket.id) ?? []).forEach((task) => ordered.push(task.id));
     });
     return ordered;
-  }, [filteredTasksByBucket, state.buckets]);
+  }, [activeBuckets, filteredTasksByBucket]);
 
   const visibleTaskIndexById = useMemo(() => {
     const map = new Map<string, number>();
@@ -318,7 +404,7 @@ export default function App() {
 
   useEffect(() => {
     const activeTaskIdSet = new Set(
-      state.tasks
+      activeTasks
         .filter((task) => !task.archivedAt)
         .map((task) => task.id),
     );
@@ -327,55 +413,103 @@ export default function App() {
     if (selectionAnchorTaskId && !activeTaskIdSet.has(selectionAnchorTaskId)) {
       setSelectionAnchorTaskId(null);
     }
-  }, [selectionAnchorTaskId, state.tasks]);
+  }, [activeTasks, selectionAnchorTaskId]);
 
   const stats = useMemo(() => {
-    const archived = state.tasks.filter((task) => task.archivedAt !== null).length;
-    const activeTotal = state.tasks.length - archived;
-    const completed = state.tasks.filter((task) => task.completed && !task.archivedAt).length;
+    const archived = activeTasks.filter((task) => task.archivedAt !== null).length;
+    const activeTotal = activeTasks.length - archived;
+    const completed = activeTasks.filter((task) => task.completed && !task.archivedAt).length;
     const open = activeTotal - completed;
     const visible = Array.from(filteredTasksByBucket.values()).reduce(
       (count, tasks) => count + tasks.length,
       0,
     );
     return { activeTotal, archived, completed, open, visible };
-  }, [state.tasks, filteredTasksByBucket]);
+  }, [activeTasks, filteredTasksByBucket]);
 
   const archivedTasks = useMemo(
-    () => state.tasks.filter((task) => task.archivedAt !== null),
-    [state.tasks],
+    () => activeTasks.filter((task) => task.archivedAt !== null),
+    [activeTasks],
   );
 
   const bucketNameById = useMemo(() => {
     const map = new Map<string, string>();
-    state.buckets.forEach((bucket) => map.set(bucket.id, bucket.name));
+    activeBuckets.forEach((bucket) => map.set(bucket.id, bucket.name));
     return map;
-  }, [state.buckets]);
+  }, [activeBuckets]);
 
   const bucketIdByNormalizedName = useMemo(() => {
     const map = new Map<string, string>();
-    state.buckets.forEach((bucket) => map.set(normalizeBucketName(bucket.name), bucket.id));
+    activeBuckets.forEach((bucket) => map.set(normalizeBucketName(bucket.name), bucket.id));
     return map;
-  }, [state.buckets]);
+  }, [activeBuckets]);
+
+  const selectProject = (projectId: string) => {
+    if (!state.projects.some((project) => project.id === projectId)) return;
+    setActiveProjectId(projectId);
+    setSelectedTaskIds([]);
+    setSelectionAnchorTaskId(null);
+    setActivePasteBucketId(null);
+    setEditor(null);
+    setSearchQuery('');
+  };
+
+  const addProject = (name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    const project = createProject(trimmedName);
+    dispatchPlanner({ type: 'ADD_PROJECT', project });
+    setActiveProjectId(project.id);
+  };
+
+  const renameProject = (projectId: string, name: string) => {
+    dispatchPlanner({ type: 'RENAME_PROJECT', projectId, name, updatedAt: now() });
+  };
+
+  const updateProjectDescription = (projectId: string, description: string) => {
+    dispatchPlanner({ type: 'UPDATE_PROJECT_DESCRIPTION', projectId, description, updatedAt: now() });
+  };
+
+  const toggleProjectPin = (projectId: string) => {
+    dispatchPlanner({ type: 'TOGGLE_PROJECT_PIN', projectId, updatedAt: now() });
+  };
+
+  const moveProjectByOffset = (projectId: string, offset: -1 | 1) => {
+    const sourceIndex = state.projects.findIndex((project) => project.id === projectId);
+    if (sourceIndex < 0) return;
+    const targetIndex = Math.max(0, Math.min(state.projects.length - 1, sourceIndex + offset));
+    if (targetIndex === sourceIndex) return;
+    dispatchPlanner({ type: 'MOVE_PROJECT', projectId, targetIndex });
+  };
+
+  const deleteProject = (project: Project) => {
+    setConfirmDialog({
+      title: 'Delete project',
+      targetLabel: project.name,
+      detail: 'Buckets and tasks in this project will be deleted together.',
+      confirmLabel: 'Delete project',
+      action: { type: 'delete-project', projectId: project.id },
+    });
+  };
 
   const addBucket = () => {
     const name = bucketName.trim();
-    if (!name) return;
-    dispatchPlanner({ type: 'ADD_BUCKET', name });
+    if (!name || !effectiveActiveProjectId) return;
+    dispatchPlanner({ type: 'ADD_BUCKET', bucket: createBucket(effectiveActiveProjectId, name) });
     setBucketName('');
     setPendingBucketWarp(true);
   };
 
   const addTaskFromBoard = (bucketId: string | null, title: string) => {
     const normalizedTitle = title.trim();
-    if (!normalizedTitle) return;
+    if (!normalizedTitle || !effectiveActiveProjectId) return;
     dispatchPlanner({
       type: 'ADD_TASK',
-      draft: {
+      task: createTask(effectiveActiveProjectId, {
         title: normalizedTitle,
         description: '',
         bucketId,
-      },
+      }),
     });
     setPendingTaskSurge(true);
   };
@@ -389,8 +523,8 @@ export default function App() {
 
   const submitBoardBucketAdd = () => {
     const name = boardBucketNameDraft.trim();
-    if (!name) return;
-    dispatchPlanner({ type: 'ADD_BUCKET', name });
+    if (!name || !effectiveActiveProjectId) return;
+    dispatchPlanner({ type: 'ADD_BUCKET', bucket: createBucket(effectiveActiveProjectId, name) });
     setBoardBucketNameDraft('');
     setPendingBucketWarp(true);
     window.requestAnimationFrame(() => {
@@ -413,8 +547,8 @@ export default function App() {
   };
 
   const bucketHotkeyTargets = useMemo(
-    () => [null, ...state.buckets.map((bucket) => bucket.id)],
-    [state.buckets],
+    () => [null, ...activeBuckets.map((bucket) => bucket.id)],
+    [activeBuckets],
   );
 
   const openQuickTaskComposer = (defaultBucketId: string | null = null) => {
@@ -435,7 +569,7 @@ export default function App() {
 
   const submitQuickTask = () => {
     const title = quickTaskTitle.trim();
-    if (!title) return;
+    if (!title || !effectiveActiveProjectId) return;
 
     const candidateBucketName = quickTaskBucketName.trim();
     const hasValidBucketName = candidateBucketName
@@ -451,7 +585,7 @@ export default function App() {
         targetBucketId = existingBucketId;
       } else {
         const newBucketId = createId();
-        dispatchPlanner({ type: 'ADD_BUCKET', name: candidateBucketName, id: newBucketId });
+        dispatchPlanner({ type: 'ADD_BUCKET', bucket: createBucket(effectiveActiveProjectId, candidateBucketName, newBucketId) });
         targetBucketId = newBucketId;
         createdBucketName = candidateBucketName;
         setPendingBucketWarp(true);
@@ -460,17 +594,17 @@ export default function App() {
 
     dispatchPlanner({
       type: 'ADD_TASK',
-      draft: {
+      task: createTask(effectiveActiveProjectId, {
         title,
         description: '',
         bucketId: targetBucketId,
-      },
+      }),
     });
 
     setQuickTaskTitle('');
     if (targetBucketId) {
       const normalized = normalizeBucketName(createdBucketName ?? candidateBucketName);
-      const stableName = state.buckets.find((bucket) => normalizeBucketName(bucket.name) === normalized)?.name
+      const stableName = activeBuckets.find((bucket) => normalizeBucketName(bucket.name) === normalized)?.name
         ?? createdBucketName
         ?? candidateBucketName;
       setQuickTaskBucketId(targetBucketId);
@@ -498,14 +632,14 @@ export default function App() {
     if (!typedValue) return null;
 
     const typedLower = typedValue.toLowerCase();
-    const match = state.buckets.find((bucket) => {
+    const match = activeBuckets.find((bucket) => {
       const name = bucket.name.trim();
       const lower = name.toLowerCase();
       return lower.startsWith(typedLower) && lower !== typedLower;
     });
 
     return match?.name ?? null;
-  }, [quickTaskBucketName, state.buckets]);
+  }, [quickTaskBucketName, activeBuckets]);
 
   const quickTaskBucketSuggestionSuffix = useMemo(() => {
     if (!quickTaskBucketSuggestion) return '';
@@ -523,7 +657,7 @@ export default function App() {
 
     if (/^[0-9]$/.test(event.key)) {
       const digit = Number(event.key);
-      const bucketTarget = digit === 0 ? null : state.buckets[digit - 1]?.id;
+      const bucketTarget = digit === 0 ? null : activeBuckets[digit - 1]?.id;
       if (digit === 0 || bucketTarget) {
         event.preventDefault();
         setQuickTaskBucketId(bucketTarget ?? null);
@@ -587,22 +721,22 @@ export default function App() {
   };
 
   const toggleBucketPin = (bucket: Bucket) => {
-    dispatchPlanner({ type: 'TOGGLE_BUCKET_PIN', bucketId: bucket.id });
+    dispatchPlanner({ type: 'TOGGLE_BUCKET_PIN', projectId: bucket.projectId, bucketId: bucket.id, updatedAt: now() });
   };
 
   const moveBucketByOffset = (bucketId: string, offset: -1 | 1) => {
-    const sourceIndex = state.buckets.findIndex((bucket) => bucket.id === bucketId);
+    const sourceIndex = activeBuckets.findIndex((bucket) => bucket.id === bucketId);
     if (sourceIndex < 0) return;
-    const targetIndex = Math.max(0, Math.min(state.buckets.length - 1, sourceIndex + offset));
+    const targetIndex = Math.max(0, Math.min(activeBuckets.length - 1, sourceIndex + offset));
     if (targetIndex === sourceIndex) return;
-    dispatchPlanner({ type: 'MOVE_BUCKET', bucketId, targetIndex });
+    dispatchPlanner({ type: 'MOVE_BUCKET', projectId: effectiveActiveProjectId, bucketId, targetIndex });
   };
 
   const dropBucketAt = (targetIndex: number) => {
-    if (!draggedBucketId) return;
-    const sourceIndex = state.buckets.findIndex((bucket) => bucket.id === draggedBucketId);
+    if (!draggedBucketId || !effectiveActiveProjectId) return;
+    const sourceIndex = activeBuckets.findIndex((bucket) => bucket.id === draggedBucketId);
     const settledFrom = sourceIndex >= 0 && targetIndex < sourceIndex ? 'right' : 'left';
-    dispatchPlanner({ type: 'MOVE_BUCKET', bucketId: draggedBucketId, targetIndex });
+    dispatchPlanner({ type: 'MOVE_BUCKET', projectId: effectiveActiveProjectId, bucketId: draggedBucketId, targetIndex });
     setSettledBucketDropIndex(targetIndex);
     setSettledBucketId(draggedBucketId);
     setSettledBucketFrom(settledFrom);
@@ -634,10 +768,20 @@ export default function App() {
   const confirmDialogAction = () => {
     if (!confirmDialog) return;
     if (confirmDialog.action.type === 'delete-task') {
-      dispatchPlanner({ type: 'DELETE_TASK', taskId: confirmDialog.action.taskId });
+      dispatchPlanner({ type: 'DELETE_TASK', projectId: effectiveActiveProjectId, taskId: confirmDialog.action.taskId });
     }
     if (confirmDialog.action.type === 'delete-bucket') {
-      dispatchPlanner({ type: 'DELETE_BUCKET', bucketId: confirmDialog.action.bucketId });
+      dispatchPlanner({ type: 'DELETE_BUCKET', projectId: effectiveActiveProjectId, bucketId: confirmDialog.action.bucketId, updatedAt: now() });
+    }
+    if (confirmDialog.action.type === 'delete-project') {
+      const fallbackProjectId = activeProjectId === confirmDialog.action.projectId
+        ? selectNearestProjectIdAfterDeletion(state.projects, confirmDialog.action.projectId)
+        : activeProjectId;
+      dispatchPlanner({ type: 'DELETE_PROJECT', projectId: confirmDialog.action.projectId });
+      setActiveProjectId(fallbackProjectId);
+      setSelectedTaskIds([]);
+      setSelectionAnchorTaskId(null);
+      setActivePasteBucketId(null);
     }
     setConfirmDialog(null);
   };
@@ -650,7 +794,7 @@ export default function App() {
       return;
     }
     if (name !== renameDialog.initialName) {
-      dispatchPlanner({ type: 'RENAME_BUCKET', bucketId: renameDialog.bucketId, name });
+      dispatchPlanner({ type: 'RENAME_BUCKET', projectId: effectiveActiveProjectId, bucketId: renameDialog.bucketId, name, updatedAt: now() });
     }
     setRenameDialog(null);
     setRenameDialogError(null);
@@ -662,7 +806,7 @@ export default function App() {
   };
 
   const confirmArchiveCompletedTasks = () => {
-    dispatchPlanner({ type: 'ARCHIVE_COMPLETED_TASKS' });
+    dispatchPlanner({ type: 'ARCHIVE_COMPLETED_TASKS', projectId: effectiveActiveProjectId, archivedAt: now() });
     setShowArchiveConfirm(false);
   };
 
@@ -671,22 +815,34 @@ export default function App() {
   };
 
   const exportData = () => {
+    if (!activeProject) return;
     setShowExportScopeMenu(false);
     let dataToExport: PlannerData = state;
     if (exportScope === 'unassigned') {
       dataToExport = {
-        version: state.version,
+        ...state,
+        projects: [activeProject],
         buckets: [],
-        tasks: state.tasks.filter((task) => task.bucketId === null),
+        tasks: activeTasks.filter((task) => task.bucketId === null),
+        templates: [],
+        templateDefinitions: [],
       };
     } else if (exportScope.startsWith('bucket:')) {
       const bucketId = exportScope.slice('bucket:'.length);
-      const bucket = state.buckets.find((item) => item.id === bucketId) ?? null;
+      const bucket = activeBuckets.find((item) => item.id === bucketId) ?? null;
       dataToExport = {
-        version: state.version,
+        ...state,
+        projects: [activeProject],
         buckets: bucket ? [bucket] : [],
-        tasks: state.tasks.filter((task) => task.bucketId === bucketId),
+        tasks: activeTasks.filter((task) => task.bucketId === bucketId),
+        templates: [],
+        templateDefinitions: [],
       };
+    }
+
+    if (!isValidPlannerDataV2(dataToExport)) {
+      setDataActionMessage('Current planner data could not be validated for export.');
+      return;
     }
 
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
@@ -707,14 +863,15 @@ export default function App() {
 
     try {
       const parsed: unknown = JSON.parse(await file.text());
-      if (!isPlannerData(parsed)) {
-        setDataActionMessage(`Selected file is not a valid ${APP_NAME} export.`);
+      const result = coercePlannerDataToV2(parsed);
+      setDataActionMessage(null);
+      return result.data;
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        setDataActionMessage('Selected file could not be read as JSON.');
         return null;
       }
-      setDataActionMessage(null);
-      return normalizePlannerData(parsed);
-    } catch {
-      setDataActionMessage('Selected file could not be read as JSON.');
+      setDataActionMessage(`Selected file is not a valid ${APP_NAME} export.`);
       return null;
     }
   };
@@ -744,8 +901,8 @@ export default function App() {
   };
 
   const confirmUploadData = () => {
-    if (!pendingUploadData) return;
-    const mergedUpload = mergeUploadedPlannerData(state, pendingUploadData);
+    if (!pendingUploadData || !effectiveActiveProjectId) return;
+    const mergedUpload = mergeUploadedPlannerDataV2(state, pendingUploadData, { targetProjectId: effectiveActiveProjectId });
     dispatchPlanner({ type: 'REPLACE_DATA', data: mergedUpload.data });
     if (uploadHaloTimeoutRef.current !== null) {
       window.clearTimeout(uploadHaloTimeoutRef.current);
@@ -789,17 +946,17 @@ export default function App() {
   const pendingUploadSummary = pendingUploadData
     ? `${pendingUploadData.tasks.length} task(s) and ${pendingUploadData.buckets.length} bucket(s)`
     : '';
-  const exportScopeOptionCount = 2 + state.buckets.length;
+  const exportScopeOptionCount = 2 + activeBuckets.length;
 
   useEffect(() => {
     if (exportScope.startsWith('bucket:')) {
       const bucketId = exportScope.slice('bucket:'.length);
-      const exists = state.buckets.some((bucket) => bucket.id === bucketId);
+      const exists = activeBuckets.some((bucket) => bucket.id === bucketId);
       if (!exists) {
         setExportScope('all');
       }
     }
-  }, [exportScope, state.buckets]);
+  }, [activeBuckets, exportScope]);
 
   const clearSearchStatusTimer = () => {
     if (hideSearchStatusTimeoutRef.current !== null) {
@@ -843,7 +1000,7 @@ export default function App() {
           }
           return rangeIds;
         });
-        setActivePasteBucketId(state.tasks.find((task) => task.id === taskId)?.bucketId ?? null);
+        setActivePasteBucketId(activeTasks.find((task) => task.id === taskId)?.bucketId ?? null);
         return;
       }
     }
@@ -857,13 +1014,13 @@ export default function App() {
         return [...current, taskId];
       });
       setSelectionAnchorTaskId(taskId);
-      setActivePasteBucketId(state.tasks.find((task) => task.id === taskId)?.bucketId ?? null);
+      setActivePasteBucketId(activeTasks.find((task) => task.id === taskId)?.bucketId ?? null);
       return;
     }
 
     setSelectedTaskIds([taskId]);
     setSelectionAnchorTaskId(taskId);
-    setActivePasteBucketId(state.tasks.find((task) => task.id === taskId)?.bucketId ?? null);
+    setActivePasteBucketId(activeTasks.find((task) => task.id === taskId)?.bucketId ?? null);
   };
 
   const handleTaskCardSelection = (taskId: string, event: ReactMouseEvent<HTMLElement>) => {
@@ -926,7 +1083,7 @@ export default function App() {
   };
 
   const copySelectedTasks = () => {
-    const tasks = state.tasks.filter(
+    const tasks = activeTasks.filter(
       (task) => selectedTaskIdSet.has(task.id) && !task.archivedAt,
     );
     if (tasks.length === 0) {
@@ -947,6 +1104,7 @@ export default function App() {
   };
 
   const pasteTasksIntoBucket = (bucketId: string | null) => {
+    if (!effectiveActiveProjectId) return;
     if (taskClipboard.length === 0) {
       showTemporaryStatus('Copy tasks first to paste');
       return;
@@ -954,7 +1112,7 @@ export default function App() {
 
     dispatchPlanner({
       type: 'ADD_TASK_BATCH',
-      drafts: taskClipboard.map((task) => ({
+      tasks: taskClipboard.map((task) => createTask(effectiveActiveProjectId, {
         title: task.title,
         description: task.description,
         bucketId,
@@ -972,7 +1130,7 @@ export default function App() {
     setDraggedTaskIds(taskIds);
     setSelectedTaskIds(taskIds);
     setSelectionAnchorTaskId(taskId);
-    setActivePasteBucketId(state.tasks.find((task) => task.id === taskId)?.bucketId ?? null);
+    setActivePasteBucketId(activeTasks.find((task) => task.id === taskId)?.bucketId ?? null);
   };
 
   const handleTaskDragEnd = () => {
@@ -981,23 +1139,29 @@ export default function App() {
   };
 
   const moveTasksToBucket = (taskIds: string[], bucketId: string | null, targetIndex?: number) => {
-    if (taskIds.length === 0) return;
+    if (taskIds.length === 0 || !effectiveActiveProjectId) return;
+
+    const updatedAt = now();
 
     if (taskIds.length === 1) {
       dispatchPlanner({
         type: 'MOVE_TASK',
+        projectId: effectiveActiveProjectId,
         taskId: taskIds[0],
         bucketId,
         targetIndex,
+        updatedAt,
       });
       return;
     }
 
     dispatchPlanner({
       type: 'MOVE_TASKS',
+      projectId: effectiveActiveProjectId,
       taskIds,
       bucketId,
       targetIndex,
+      updatedAt,
     });
   };
 
@@ -1027,7 +1191,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [activePasteBucketId, selectedTaskIds.length, taskClipboard, state.tasks, selectedTaskIdSet]);
+  }, [activePasteBucketId, activeTasks, selectedTaskIds.length, taskClipboard, selectedTaskIdSet]);
 
   // Keyboard shortcuts for undo/redo, copy/paste
   usePlannerKeyboardShortcuts({
@@ -1071,9 +1235,9 @@ export default function App() {
   }, [pendingUploadData]);
 
   useEffect(() => {
-    if (!pendingBucketWarp || state.buckets.length === 0) return;
+    if (!pendingBucketWarp || activeBuckets.length === 0) return;
 
-    const latestBucket = state.buckets.reduce((latest, current) => (
+    const latestBucket = activeBuckets.reduce((latest, current) => (
       current.createdAt > latest.createdAt ? current : latest
     ));
 
@@ -1100,12 +1264,12 @@ export default function App() {
       bucketHighlightTimeoutRef.current = null;
     }, 2600);
     setPendingBucketWarp(false);
-  }, [pendingBucketWarp, state.buckets]);
+  }, [activeBuckets, pendingBucketWarp]);
 
   useEffect(() => {
-    if (!pendingTaskSurge || state.tasks.length === 0) return;
+    if (!pendingTaskSurge || activeTasks.length === 0) return;
 
-    const latestTask = state.tasks.reduce((latest, current) => (
+    const latestTask = activeTasks.reduce((latest, current) => (
       current.createdAt > latest.createdAt ? current : latest
     ));
 
@@ -1122,15 +1286,15 @@ export default function App() {
     }, 2200);
 
     setPendingTaskSurge(false);
-  }, [pendingTaskSurge, state.tasks]);
+  }, [activeTasks, pendingTaskSurge]);
 
   const draggedTaskAccentIndex = useMemo(() => {
     const leadTaskId = draggedTaskIds[0] ?? draggedTaskId;
     if (!leadTaskId) return null;
-    const draggedTask = state.tasks.find((task) => task.id === leadTaskId) ?? null;
+    const draggedTask = activeTasks.find((task) => task.id === leadTaskId) ?? null;
     if (!draggedTask) return null;
     return accentIndexFromBucket(draggedTask.bucketId);
-  }, [draggedTaskId, draggedTaskIds, state.tasks]);
+  }, [activeTasks, draggedTaskId, draggedTaskIds]);
 
   const uploadedTaskIdSet = useMemo(() => new Set(uploadedTaskIds), [uploadedTaskIds]);
 
@@ -1453,6 +1617,17 @@ export default function App() {
                 {sidepanelLockIcon}
               </button>
             </div>
+            <ProjectList
+              projects={state.projects}
+              activeProjectId={effectiveActiveProjectId}
+              onSelectProject={selectProject}
+              onCreateProject={addProject}
+              onRenameProject={renameProject}
+              onUpdateProjectDescription={updateProjectDescription}
+              onToggleProjectPin={toggleProjectPin}
+              onMoveProject={moveProjectByOffset}
+              onDeleteProject={deleteProject}
+            />
             <section className="panel-card">
               <h2>Tasks</h2>
               <div ref={quickTaskShellRef} className={`quick-task-shell interaction-scroll-target${quickTaskOpen ? ' open' : ''}`}>
@@ -1495,7 +1670,7 @@ export default function App() {
                         />
                       </div>
                       <datalist id="quick-task-bucket-options">
-                        {state.buckets.map((bucket) => (
+                        {activeBuckets.map((bucket) => (
                           <option key={bucket.id} value={bucket.name} />
                         ))}
                       </datalist>
@@ -1619,13 +1794,13 @@ export default function App() {
                           dragLabel="Archived"
                           onEdit={() => setEditor({ task, defaultBucketId: task.bucketId })}
                           onDelete={() => deleteTask(task)}
-                          onToggle={() => dispatchPlanner({ type: 'TOGGLE_TASK', taskId: task.id })}
-                          onTogglePin={() => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', taskId: task.id })}
+                          onToggle={() => dispatchPlanner({ type: 'TOGGLE_TASK', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
+                          onTogglePin={() => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
                           onCopy={() => copyTaskToClipboard(
                             task,
                             task.bucketId ? bucketNameById.get(task.bucketId) ?? 'Unassigned' : 'Unassigned',
                           )}
-                          onAuxAction={() => dispatchPlanner({ type: 'UNARCHIVE_TASK', taskId: task.id })}
+                          onAuxAction={() => dispatchPlanner({ type: 'UNARCHIVE_TASK', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
                           auxActionLabel="Undo"
                           onDragStart={(_event) => undefined}
                           onDragEnd={() => undefined}
@@ -1718,7 +1893,7 @@ export default function App() {
                   >
                     Unassigned tasks
                   </button>
-                  {state.buckets.map((bucket) => (
+                  {activeBuckets.map((bucket) => (
                     <button
                       key={bucket.id}
                       type="button"
@@ -1821,7 +1996,7 @@ export default function App() {
             </section>
           </aside>
           <div ref={boardFrameRef} className="board-frame">
-            <section className="board">
+            <ProjectBoard project={activeProject}>
               <BucketColumn
                 columnIndex={0}
                 bucket={null}
@@ -1841,8 +2016,8 @@ export default function App() {
                 onQuickAddTask={addTaskFromBoard}
                 onEditTask={(task) => setEditor({ task, defaultBucketId: task.bucketId })}
                 onDeleteTask={deleteTask}
-                onToggleTask={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK', taskId })}
-                onToggleTaskPin={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', taskId })}
+                onToggleTask={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK', projectId: effectiveActiveProjectId, taskId, updatedAt: now() })}
+                onToggleTaskPin={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', projectId: effectiveActiveProjectId, taskId, updatedAt: now() })}
                 onMoveTask={(taskId, bucketId, targetIndex) => moveTasksToBucket([taskId], bucketId, targetIndex)}
                 onMoveTasks={moveTasksToBucket}
                 selectedTaskIds={selectedTaskIdSet}
@@ -1862,7 +2037,7 @@ export default function App() {
                 }}
               />
 
-              {state.buckets.map((bucket, index) => (
+              {activeBuckets.map((bucket, index) => (
                 <Fragment key={bucket.id}>
                   <div
                     className={`bucket-drop-slot interaction-drop-slot interaction-bucket-drop-slot bucket-accent-${accentIndexFromBucket(bucket.id)}${draggedBucketId ? ' visible' : ''}${activeBucketDropIndex === index ? ' active' : ''}${settledBucketDropIndex === index ? ' settled' : ''}`}
@@ -1899,8 +2074,8 @@ export default function App() {
                     onQuickAddTask={addTaskFromBoard}
                     onEditTask={(task) => setEditor({ task, defaultBucketId: task.bucketId })}
                     onDeleteTask={deleteTask}
-                    onToggleTask={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK', taskId })}
-                    onToggleTaskPin={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', taskId })}
+                    onToggleTask={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK', projectId: effectiveActiveProjectId, taskId, updatedAt: now() })}
+                    onToggleTaskPin={(taskId) => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', projectId: effectiveActiveProjectId, taskId, updatedAt: now() })}
                     onMoveTask={(taskId, bucketId, targetIndex) => moveTasksToBucket([taskId], bucketId, targetIndex)}
                     onMoveTasks={moveTasksToBucket}
                     selectedTaskIds={selectedTaskIdSet}
@@ -1920,7 +2095,7 @@ export default function App() {
                     }}
                     onMoveBucketByOffset={moveBucketByOffset}
                     canMoveBucketLeft={index > 0}
-                    canMoveBucketRight={index < state.buckets.length - 1}
+                    canMoveBucketRight={index < activeBuckets.length - 1}
                     onBucketDropSettleEnd={() => {
                       if (bucketDropSettleTimeoutRef.current !== null) {
                         window.clearTimeout(bucketDropSettleTimeoutRef.current);
@@ -1936,18 +2111,18 @@ export default function App() {
                 </Fragment>
               ))}
 
-              {state.buckets.length > 0 && (
+              {activeBuckets.length > 0 && (
                 <div
-                  className={`bucket-drop-slot interaction-drop-slot interaction-bucket-drop-slot bucket-accent-${accentIndexFromBucket(state.buckets[state.buckets.length - 1]?.id ?? null)}${draggedBucketId ? ' visible' : ''}${activeBucketDropIndex === state.buckets.length ? ' active' : ''}${settledBucketDropIndex === state.buckets.length ? ' settled' : ''}`}
+                  className={`bucket-drop-slot interaction-drop-slot interaction-bucket-drop-slot bucket-accent-${accentIndexFromBucket(activeBuckets[activeBuckets.length - 1]?.id ?? null)}${draggedBucketId ? ' visible' : ''}${activeBucketDropIndex === activeBuckets.length ? ' active' : ''}${settledBucketDropIndex === activeBuckets.length ? ' settled' : ''}`}
                   onDragOver={(event) => {
                     if (!draggedBucketId) return;
                     event.preventDefault();
                     event.dataTransfer.dropEffect = 'move';
-                    setActiveBucketDropIndex(state.buckets.length);
+                    setActiveBucketDropIndex(activeBuckets.length);
                   }}
                   onDrop={(event) => {
                     event.preventDefault();
-                    dropBucketAt(state.buckets.length);
+                    dropBucketAt(activeBuckets.length);
                   }}
                   aria-hidden="true"
                 />
@@ -1971,14 +2146,14 @@ export default function App() {
                   </button>
                 )}
               </section>
-            </section>
+            </ProjectBoard>
           </div>
         </section>
       </div>
 
       {editor && (
         <TaskEditor
-          buckets={state.buckets}
+          buckets={activeBuckets}
           task={editor.task}
           defaultBucketId={editor.defaultBucketId}
           onSave={saveTask}
