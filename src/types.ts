@@ -42,40 +42,40 @@ export type PlannerTaskV1 = PlannerTask;
 // V2 SCHEMA TYPES (exported for reference; actual types in types/v2.ts)
 // ============================================================================
 export type {
-    Priority,
-    ResourceTag,
-    Project,
-    BucketTemplate,
-    BucketTemplateDefinition,
-    BucketV2,
-    PlannerTaskV2,
-    PlannerDataV2,
+  Priority,
+  ResourceTag,
+  Project,
+  BucketTemplate,
+  BucketTemplateDefinition,
+  BucketV2,
+  PlannerTaskV2,
+  PlannerDataV2,
 } from './types/v2';
 
 export {
-    PLANNER_DATA_V2_VERSION,
-    DEFAULT_PROJECT_ID,
-    MIGRATION_FALLBACK_TIMESTAMP,
-    createInitialPlannerDataV2,
+  PLANNER_DATA_V2_VERSION,
+  DEFAULT_PROJECT_ID,
+  MIGRATION_FALLBACK_TIMESTAMP,
+  createInitialPlannerDataV2,
 } from './types/v2';
 
 // ============================================================================
 // MIGRATION AND VALIDATION (exported for reference)
 // ============================================================================
-export { migrateV1toV2, normalizeResourceTags, detectPlannerVersion, deriveMigrationTimestamps } from './types/migration';
+export { migrateV1toV2, normalizeResourceTags, detectPlannerVersion, deriveMigrationTimestamps, selectProjectId } from './types/migration';
 
 export {
-    isValidPlannerDataV1,
-    isValidBucketV1,
-    isValidTaskV1,
-    isPlannerDataV2Shape,
-    isValidPlannerDataV2,
-    isValidProject,
-    isValidBucketTemplate,
-    isValidBucketTemplateDefinition,
-    isValidBucketV2,
-    isValidTaskV2,
-    isValidPriority,
-    isValidResourceTag,
-    validatePlannerDataV2Integrity,
+  isValidPlannerDataV1,
+  isValidBucketV1,
+  isValidTaskV1,
+  isPlannerDataV2Shape,
+  isValidPlannerDataV2,
+  isValidProject,
+  isValidBucketTemplate,
+  isValidBucketTemplateDefinition,
+  isValidBucketV2,
+  isValidTaskV2,
+  isValidPriority,
+  isValidResourceTag,
+  validatePlannerDataV2Integrity,
 } from './types/validators';

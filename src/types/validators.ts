@@ -82,14 +82,14 @@ export const isValidPriority = (value: unknown): value is Priority => {
 
 /**
  * Validate resource tag is in canonical form (already processed).
- * 
+ *
  * Canonical form requirements:
  * - Must be a string
  * - Must be non-empty
  * - Must equal its trimmed value (no leading/trailing whitespace)
  * - Must equal its lowercase value (no uppercase characters)
  * - Must not contain internal duplicate spaces
- * 
+ *
  * This validates that a tag is ALREADY in canonical form,
  * not that it CAN be normalized to canonical form.
  */
@@ -246,11 +246,11 @@ export const isPlannerDataV2Shape = (value: unknown): value is PlannerDataV2 => 
 
 /**
  * Complete v2 planner data validation: structure + relational integrity.
- * 
+ *
  * Checks:
  * - Structural correctness (isValidPlannerDataV2Shape)
  * - Relational integrity (projects exist, no orphans, same-project references, etc.)
- * 
+ *
  * Returns false on any validation failure (does not throw).
  * Use for data loaded from persistence or user input.
  */
@@ -303,6 +303,11 @@ export const validateNoDuplicateIds = (data: PlannerDataV2): void => {
     for (const task of data.tasks) {
         if (allIds.has(task.id)) throw new Error(`Duplicate task ID: ${task.id}`);
         allIds.add(task.id);
+    }
+
+    for (const template of data.templates) {
+        if (allIds.has(template.id)) throw new Error(`Duplicate template ID: ${template.id}`);
+        allIds.add(template.id);
     }
 
     for (const def of data.templateDefinitions) {

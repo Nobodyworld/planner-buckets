@@ -1,26 +1,26 @@
 /**
  * Deterministic v1→v2 migration: pure function with no side effects.
  * Input immutability guaranteed; output identical for identical input.
- * 
+ *
  * Timestamp derivation rule:
  * - createdAt: earliest timestamp from all v1 buckets and tasks
  * - updatedAt: latest timestamp from all v1 buckets and tasks
  * - fallback: MIGRATION_FALLBACK_TIMESTAMP if no timestamps found
  */
 
-import type { PlannerData } from '../types';
+import type { PlannerDataV1 } from '../types';
 import type { PlannerDataV2, BucketV2, PlannerTaskV2, Priority, ResourceTag } from './v2';
 import { PLANNER_DATA_V2_VERSION, DEFAULT_PROJECT_ID, MIGRATION_FALLBACK_TIMESTAMP } from './v2';
 import { isValidPlannerDataV1, validatePlannerDataV2Integrity } from './validators';
 
 /**
  * Derive deterministic migration timestamps from v1 data.
- * 
+ *
  * Rules:
  * - createdAt: earliest valid timestamp across all buckets and tasks
  * - updatedAt: latest valid timestamp across all buckets and tasks
  * - fallback: MIGRATION_FALLBACK_TIMESTAMP if no timestamps found
- * 
+ *
  * Returns [createdAt, updatedAt]
  */
 export const deriveMigrationTimestamps = (
@@ -84,12 +84,38 @@ export const normalizeResourceTags = (tags: unknown[]): ResourceTag[] => {
 };
 
 /**
+ * Select a project ID that doesn't collide with any existing entity IDs.
+ * 
+ * Algorithm:
+ * 1. Try 'project-default'
+ * 2. If occupied, try 'project-default-2'
+ * 3. Continue incrementing deterministically until unused ID found
+ * 
+ * Pure function: no side effects, deterministic.
+ */
+export const selectProjectId = (existingIds: Set<string>): string => {
+    if (!existingIds.has(DEFAULT_PROJECT_ID)) {
+        return DEFAULT_PROJECT_ID;
+    }
+
+    let counter = 2;
+    while (true) {
+        const candidateId = `project-default-${counter}`;
+        if (!existingIds.has(candidateId)) {
+            return candidateId;
+        }
+        counter++;
+    }
+};
+
+/**
  * Migrate v1 planner data to v2.
  *
  * Migration rules:
  * - Create one default project with deterministic timestamps derived from v1 data
- * - Place all existing buckets in the default project
- * - Place all existing tasks in the default project
+ * - Select project ID deterministically (avoids collisions with v1 data)
+ * - Place all existing buckets in the selected project
+ * - Place all existing tasks in the selected project
  * - Preserve bucket IDs, task IDs, names, descriptions, timestamps
  * - Preserve completion, pinning, ordering, archive state
  * - Tasks with bucketId: null remain unassigned
@@ -102,7 +128,7 @@ export const normalizeResourceTags = (tags: unknown[]): ResourceTag[] => {
  * Immutability guarantee: Input data not modified
  * Clock independence: No runtime clock access (new Date() not used)
  */
-export const migrateV1toV2 = (v1Data: PlannerData): PlannerDataV2 => {
+export const migrateV1toV2 = (v1Data: PlannerDataV1): PlannerDataV2 => {
     // Validate input is valid v1 data
     if (!isValidPlannerDataV1(v1Data)) {
         throw new Error('Input is not valid v1 planner data');
@@ -111,9 +137,21 @@ export const migrateV1toV2 = (v1Data: PlannerData): PlannerDataV2 => {
     // Derive deterministic project timestamps from v1 data
     const [projectCreatedAt, projectUpdatedAt] = deriveMigrationTimestamps(v1Data.buckets, v1Data.tasks);
 
+    // Collect all existing entity IDs to check for collisions
+    const existingIds = new Set<string>();
+    for (const bucket of v1Data.buckets) {
+        existingIds.add(bucket.id);
+    }
+    for (const task of v1Data.tasks) {
+        existingIds.add(task.id);
+    }
+
+    // Select project ID deterministically, avoiding collisions
+    const selectedProjectId = selectProjectId(existingIds);
+
     // Create default project with deterministic timestamps
     const defaultProject = {
-        id: DEFAULT_PROJECT_ID,
+        id: selectedProjectId,
         name: 'My Planner',
         description: 'Migrated from v1',
         priority: 0 as Priority,
@@ -125,7 +163,7 @@ export const migrateV1toV2 = (v1Data: PlannerData): PlannerDataV2 => {
     // Migrate v1 buckets to v2 buckets in default project
     const migratedBuckets: BucketV2[] = v1Data.buckets.map(v1Bucket => ({
         id: v1Bucket.id,
-        projectId: DEFAULT_PROJECT_ID,
+        projectId: selectedProjectId,
         name: v1Bucket.name,
         description: '', // v1 buckets don't have descriptions
         templateDefinitionId: null,
@@ -138,7 +176,7 @@ export const migrateV1toV2 = (v1Data: PlannerData): PlannerDataV2 => {
     // Migrate v1 tasks to v2 tasks in default project
     const migratedTasks: PlannerTaskV2[] = v1Data.tasks.map(v1Task => ({
         id: v1Task.id,
-        projectId: DEFAULT_PROJECT_ID,
+        projectId: selectedProjectId,
         bucketId: v1Task.bucketId, // Preserve null for unassigned
         title: v1Task.title,
         description: v1Task.description,

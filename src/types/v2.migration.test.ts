@@ -26,6 +26,7 @@ import {
     normalizeResourceTags,
     detectPlannerVersion,
     deriveMigrationTimestamps,
+    selectProjectId,
 } from './migration';
 
 describe('Phase 2: v2 Schema and Migration', () => {
@@ -979,6 +980,412 @@ describe('Phase 2: v2 Schema and Migration', () => {
 
             // Verify all tasks are in default project
             expect(v2.tasks.every(t => t.projectId === DEFAULT_PROJECT_ID)).toBe(true);
+        });
+    });
+
+    // =========================================================================
+    // 24. Global ID uniqueness (templates included)
+    // =========================================================================
+    describe('Global ID uniqueness enforcement', () => {
+        it('rejects template ID colliding with project ID', () => {
+            const v2: PlannerDataV2 = {
+                version: PLANNER_DATA_V2_VERSION,
+                projects: [
+                    {
+                        id: 'shared-id',
+                        name: 'Project',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                buckets: [],
+                tasks: [],
+                templates: [
+                    {
+                        id: 'shared-id', // Collision!
+                        name: 'Template',
+                        description: '',
+                        active: true,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templateDefinitions: [],
+            };
+
+            expect(() => validatePlannerDataV2Integrity(v2)).toThrow('Duplicate template ID');
+        });
+
+        it('rejects template ID colliding with bucket ID', () => {
+            const v2: PlannerDataV2 = {
+                version: PLANNER_DATA_V2_VERSION,
+                projects: [
+                    {
+                        id: 'p1',
+                        name: 'Project',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                buckets: [
+                    {
+                        id: 'shared-id',
+                        projectId: 'p1',
+                        name: 'Bucket',
+                        description: '',
+                        templateDefinitionId: null,
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                tasks: [],
+                templates: [
+                    {
+                        id: 'shared-id', // Collision with bucket!
+                        name: 'Template',
+                        description: '',
+                        active: true,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templateDefinitions: [],
+            };
+
+            expect(() => validatePlannerDataV2Integrity(v2)).toThrow('Duplicate template ID');
+        });
+
+        it('rejects template ID colliding with task ID', () => {
+            const v2: PlannerDataV2 = {
+                version: PLANNER_DATA_V2_VERSION,
+                projects: [
+                    {
+                        id: 'p1',
+                        name: 'Project',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                buckets: [],
+                tasks: [
+                    {
+                        id: 'shared-id',
+                        projectId: 'p1',
+                        bucketId: null,
+                        title: 'Task',
+                        description: '',
+                        priority: 0,
+                        resourceTags: [],
+                        pinned: false,
+                        completed: false,
+                        archivedAt: null,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templates: [
+                    {
+                        id: 'shared-id', // Collision with task!
+                        name: 'Template',
+                        description: '',
+                        active: true,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templateDefinitions: [],
+            };
+
+            expect(() => validatePlannerDataV2Integrity(v2)).toThrow('Duplicate template ID');
+        });
+
+        it('rejects template ID colliding with template definition ID', () => {
+            const v2: PlannerDataV2 = {
+                version: PLANNER_DATA_V2_VERSION,
+                projects: [
+                    {
+                        id: 'p1',
+                        name: 'Project',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                buckets: [],
+                tasks: [],
+                templates: [
+                    {
+                        id: 'shared-id',
+                        name: 'Template',
+                        description: '',
+                        active: true,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templateDefinitions: [
+                    {
+                        id: 'shared-id', // Collision with template!
+                        templateId: 'shared-id',
+                        name: 'Definition',
+                        description: '',
+                        priority: 0,
+                        defaultActive: true,
+                        position: 0,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+            };
+
+            expect(() => validatePlannerDataV2Integrity(v2)).toThrow('Duplicate template definition ID');
+        });
+
+        it('accepts non-colliding template IDs across all entities', () => {
+            const v2: PlannerDataV2 = {
+                version: PLANNER_DATA_V2_VERSION,
+                projects: [
+                    {
+                        id: 'p1',
+                        name: 'Project',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                buckets: [
+                    {
+                        id: 'b1',
+                        projectId: 'p1',
+                        name: 'Bucket',
+                        description: '',
+                        templateDefinitionId: null,
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                tasks: [
+                    {
+                        id: 't1',
+                        projectId: 'p1',
+                        bucketId: 'b1',
+                        title: 'Task',
+                        description: '',
+                        priority: 0,
+                        resourceTags: [],
+                        pinned: false,
+                        completed: false,
+                        archivedAt: null,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templates: [
+                    {
+                        id: 'tmpl1',
+                        name: 'Template',
+                        description: '',
+                        active: true,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templateDefinitions: [
+                    {
+                        id: 'def1',
+                        templateId: 'tmpl1',
+                        name: 'Definition',
+                        description: '',
+                        priority: 0,
+                        defaultActive: true,
+                        position: 0,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+            };
+
+            expect(() => validatePlannerDataV2Integrity(v2)).not.toThrow();
+        });
+    });
+
+    // =========================================================================
+    // 25. Project ID collision handling
+    // =========================================================================
+    describe('Deterministic project ID selection', () => {
+        it('selects project-default when no collision', () => {
+            const existingIds = new Set(['bucket-1', 'task-1']);
+            const selectedId = selectProjectId(existingIds);
+
+            expect(selectedId).toBe(DEFAULT_PROJECT_ID);
+        });
+
+        it('selects project-default-2 when project-default occupied by bucket', () => {
+            const existingIds = new Set([DEFAULT_PROJECT_ID, 'task-1']);
+            const selectedId = selectProjectId(existingIds);
+
+            expect(selectedId).toBe('project-default-2');
+            expect(!existingIds.has(selectedId)).toBe(true);
+        });
+
+        it('selects project-default-2 when project-default occupied by task', () => {
+            const existingIds = new Set(['bucket-1', DEFAULT_PROJECT_ID]);
+            const selectedId = selectProjectId(existingIds);
+
+            expect(selectedId).toBe('project-default-2');
+        });
+
+        it('increments deterministically through multiple occupied candidates', () => {
+            const existingIds = new Set([
+                DEFAULT_PROJECT_ID,
+                'project-default-2',
+                'project-default-3',
+            ]);
+            const selectedId = selectProjectId(existingIds);
+
+            expect(selectedId).toBe('project-default-4');
+        });
+
+        it('produces deterministic output for identical input', () => {
+            const existingIds = new Set([DEFAULT_PROJECT_ID, 'project-default-2']);
+
+            const result1 = selectProjectId(existingIds);
+            const result2 = selectProjectId(existingIds);
+            const result3 = selectProjectId(existingIds);
+
+            expect(result1).toBe(result2);
+            expect(result2).toBe(result3);
+            expect(result1).toBe('project-default-3');
+        });
+    });
+
+    // =========================================================================
+    // 26. Migration with project ID collision handling
+    // =========================================================================
+    describe('Migration with project ID collision', () => {
+        it('uses alternate project ID when default collides with bucket ID', () => {
+            const v1: PlannerData = {
+                version: PLANNER_DATA_VERSION,
+                buckets: [
+                    {
+                        id: DEFAULT_PROJECT_ID, // Collision!
+                        name: 'To Do',
+                        createdAt: '2026-01-01T00:00:00Z',
+                        pinned: true,
+                    },
+                ],
+                tasks: [],
+            };
+
+            const v2 = migrateV1toV2(v1);
+
+            // Should use alternate ID
+            expect(v2.projects[0].id).not.toBe(DEFAULT_PROJECT_ID);
+            expect(v2.projects[0].id).toBe('project-default-2');
+            expect(v2.buckets[0].projectId).toBe('project-default-2');
+        });
+
+        it('uses alternate project ID when default collides with task ID', () => {
+            const v1: PlannerData = {
+                version: PLANNER_DATA_VERSION,
+                buckets: [
+                    { id: 'bucket-1', name: 'Bucket', createdAt: '2026-01-01T00:00:00Z', pinned: false },
+                ],
+                tasks: [
+                    {
+                        id: DEFAULT_PROJECT_ID, // Collision!
+                        title: 'Task',
+                        description: '',
+                        bucketId: 'bucket-1',
+                        pinned: false,
+                        completed: false,
+                        archivedAt: null,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+            };
+
+            const v2 = migrateV1toV2(v1);
+
+            expect(v2.projects[0].id).toBe('project-default-2');
+            expect(v2.buckets[0].projectId).toBe('project-default-2');
+            expect(v2.tasks[0].projectId).toBe('project-default-2');
+        });
+
+        it('handles multiple collisions and selects next available ID', () => {
+            const v1: PlannerData = {
+                version: PLANNER_DATA_VERSION,
+                buckets: [
+                    { id: DEFAULT_PROJECT_ID, name: 'B1', createdAt: '2026-01-01T00:00:00Z', pinned: true },
+                    { id: 'project-default-2', name: 'B2', createdAt: '2026-01-02T00:00:00Z', pinned: false },
+                ],
+                tasks: [],
+            };
+
+            const v2 = migrateV1toV2(v1);
+
+            expect(v2.projects[0].id).toBe('project-default-3');
+            expect(v2.buckets.every(b => b.projectId === 'project-default-3')).toBe(true);
+        });
+
+        it('maintains deterministic migration with alternate project ID', () => {
+            const v1: PlannerData = {
+                version: PLANNER_DATA_VERSION,
+                buckets: [{ id: DEFAULT_PROJECT_ID, name: 'Bucket', createdAt: '2026-01-01T00:00:00Z', pinned: false }],
+                tasks: [],
+            };
+
+            const result1 = migrateV1toV2(v1);
+            const result2 = migrateV1toV2(v1);
+
+            expect(JSON.stringify(result1)).toBe(JSON.stringify(result2));
+            expect(result1.projects[0].id).toBe('project-default-2');
+        });
+
+        it('validates output with alternate project ID', () => {
+            const v1: PlannerData = {
+                version: PLANNER_DATA_VERSION,
+                buckets: [
+                    { id: DEFAULT_PROJECT_ID, name: 'Bucket', createdAt: '2026-01-01T00:00:00Z', pinned: false },
+                ],
+                tasks: [
+                    {
+                        id: 't1',
+                        title: 'Task',
+                        description: '',
+                        bucketId: DEFAULT_PROJECT_ID,
+                        pinned: false,
+                        completed: false,
+                        archivedAt: null,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+            };
+
+            const v2 = migrateV1toV2(v1);
+
+            // Must pass complete validation even with alternate ID
+            expect(isValidPlannerDataV2(v2)).toBe(true);
+            expect(() => validatePlannerDataV2Integrity(v2)).not.toThrow();
         });
     });
 });
