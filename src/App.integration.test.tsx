@@ -8,6 +8,7 @@ import { PLANNER_DATA_V2_VERSION } from './types/v2';
 
 const V1_STORAGE_KEY = 'planner-buckets:data:v1';
 const V2_STORAGE_KEY = 'planner-buckets:data:v2';
+const V2_RECOVERY_KEY = 'planner-buckets:data:v2:recovery';
 
 const plannerFixture: PlannerData = {
     version: 1,
@@ -406,6 +407,36 @@ describe('App integration', () => {
         fireEvent.keyDown(input, { key: 'Enter' });
 
         expect(screen.getByRole('heading', { name: 'Board Added Bucket' })).toBeInTheDocument();
+    });
+
+    it('starts an empty browser storage with the v1 default board buckets', async () => {
+        localStorage.clear();
+
+        render(<App />);
+
+        expect(screen.getByRole('heading', { name: 'To Do' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'In Progress' })).toBeInTheDocument();
+
+        await waitFor(() => {
+            const saved = readRuntimePlannerData();
+            expect(saved.projects).toHaveLength(1);
+            expect(saved.buckets.map((bucket) => bucket.name)).toEqual(['To Do', 'In Progress']);
+            expect(saved.buckets.map((bucket) => bucket.pinned)).toEqual([true, false]);
+            expect(saved.tasks).toEqual([]);
+        });
+    });
+
+    it('preserves malformed v2 recovery data during initial App save', async () => {
+        const malformedV2 = 'not-json but important';
+        localStorage.clear();
+        localStorage.setItem(V2_STORAGE_KEY, malformedV2);
+
+        render(<App />);
+
+        await waitFor(() => {
+            expect(localStorage.getItem(V2_RECOVERY_KEY)).toBe(malformedV2);
+            expect(readRuntimePlannerData().version).toBe(2);
+        });
     });
 
     it('initially selects the first pinned project and renders only that project board', () => {

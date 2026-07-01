@@ -32,6 +32,32 @@ const normalizePinnedOrder = <Item extends { pinned: boolean }>(items: Item[]): 
   return [...pinned, ...unpinned];
 };
 
+export const hasPlannerDataV2Id = (state: PlannerDataV2, id: string): boolean => (
+  state.projects.some((project) => project.id === id) ||
+  state.buckets.some((bucket) => bucket.id === id) ||
+  state.tasks.some((task) => task.id === id) ||
+  state.templates.some((template) => template.id === id) ||
+  state.templateDefinitions.some((definition) => definition.id === id)
+);
+
+const areSameIdOrder = <Item extends { id: string }>(left: Item[], right: Item[]): boolean => (
+  left.length === right.length && left.every((item, index) => item.id === right[index]?.id)
+);
+
+const areSameReferences = <Item>(left: Item[], right: Item[]): boolean => (
+  left.length === right.length && left.every((item, index) => item === right[index])
+);
+
+const areSameTaskPositions = (
+  left: PlannerTaskV2[],
+  right: PlannerTaskV2[],
+  movedTaskIds: Set<string>,
+  targetBucketId: string | null,
+): boolean => (
+  areSameIdOrder(left, right) &&
+  left.every((task) => !movedTaskIds.has(task.id) || task.bucketId === targetBucketId)
+);
+
 const moveWithPinnedOrder = <Item extends { id: string; pinned: boolean }>(
   items: Item[],
   itemId: string,
@@ -55,9 +81,11 @@ const moveWithPinnedOrder = <Item extends { id: string; pinned: boolean }>(
     ...sameGroup.slice(groupInsertIndex),
   ];
 
-  return movingItem.pinned
+  const nextItems = movingItem.pinned
     ? [...reorderedGroup, ...otherGroup]
     : [...otherGroup, ...reorderedGroup];
+
+  return areSameIdOrder(items, nextItems) ? items : nextItems;
 };
 
 const togglePinnedWithOrder = <Item extends { id: string; pinned: boolean }>(
@@ -89,27 +117,33 @@ const replaceProjectBuckets = (
   state: PlannerDataV2,
   projectId: string,
   buckets: BucketV2[],
-): PlannerDataV2 => ({
-  ...state,
-  buckets: state.projects.flatMap((project) => (
+): PlannerDataV2 => {
+  const nextBuckets = state.projects.flatMap((project) => (
     project.id === projectId
       ? buckets
       : state.buckets.filter((bucket) => bucket.projectId === project.id)
-  )),
-});
+  ));
+
+  return nextBuckets === state.buckets || areSameReferences(nextBuckets, state.buckets)
+    ? state
+    : { ...state, buckets: nextBuckets };
+};
 
 const replaceProjectTasks = (
   state: PlannerDataV2,
   projectId: string,
   tasks: PlannerTaskV2[],
-): PlannerDataV2 => ({
-  ...state,
-  tasks: state.projects.flatMap((project) => (
+): PlannerDataV2 => {
+  const nextTasks = state.projects.flatMap((project) => (
     project.id === projectId
       ? tasks
       : state.tasks.filter((task) => task.projectId === project.id)
-  )),
-});
+  ));
+
+  return nextTasks === state.tasks || areSameReferences(nextTasks, state.tasks)
+    ? state
+    : { ...state, tasks: nextTasks };
+};
 
 const moveTaskWithOrder = (
   tasks: PlannerTaskV2[],
@@ -138,34 +172,38 @@ const moveTaskWithOrder = (
   );
 
   const beforeTask = bucketTasks[safeIndex] ?? null;
-  if (beforeTask) {
-    const insertAt = withoutMoved.findIndex((task) => task.id === beforeTask.id);
-    return [
-      ...withoutMoved.slice(0, insertAt),
-      movedTask,
-      ...withoutMoved.slice(insertAt),
-    ];
-  }
-
-  const lastBucketIndex = (() => {
-    for (let index = withoutMoved.length - 1; index >= 0; index -= 1) {
-      if (withoutMoved[index]?.bucketId === bucketId && !withoutMoved[index]?.archivedAt) {
-        return index;
-      }
+  const nextTasks = (() => {
+    if (beforeTask) {
+      const insertAt = withoutMoved.findIndex((task) => task.id === beforeTask.id);
+      return [
+        ...withoutMoved.slice(0, insertAt),
+        movedTask,
+        ...withoutMoved.slice(insertAt),
+      ];
     }
-    return -1;
+
+    const lastBucketIndex = (() => {
+      for (let index = withoutMoved.length - 1; index >= 0; index -= 1) {
+        if (withoutMoved[index]?.bucketId === bucketId && !withoutMoved[index]?.archivedAt) {
+          return index;
+        }
+      }
+      return -1;
+    })();
+
+    if (lastBucketIndex >= 0) {
+      const insertAt = lastBucketIndex + 1;
+      return [
+        ...withoutMoved.slice(0, insertAt),
+        movedTask,
+        ...withoutMoved.slice(insertAt),
+      ];
+    }
+
+    return [...withoutMoved, movedTask];
   })();
 
-  if (lastBucketIndex >= 0) {
-    const insertAt = lastBucketIndex + 1;
-    return [
-      ...withoutMoved.slice(0, insertAt),
-      movedTask,
-      ...withoutMoved.slice(insertAt),
-    ];
-  }
-
-  return [...withoutMoved, movedTask];
+  return areSameTaskPositions(tasks, nextTasks, new Set([taskId]), bucketId) ? tasks : nextTasks;
 };
 
 const moveTasksWithOrder = (
@@ -196,34 +234,38 @@ const moveTasksWithOrder = (
   );
 
   const beforeTask = bucketTasks[safeIndex] ?? null;
-  if (beforeTask) {
-    const insertAt = withoutMoved.findIndex((task) => task.id === beforeTask.id);
-    return [
-      ...withoutMoved.slice(0, insertAt),
-      ...movedTasks,
-      ...withoutMoved.slice(insertAt),
-    ];
-  }
-
-  const lastBucketIndex = (() => {
-    for (let index = withoutMoved.length - 1; index >= 0; index -= 1) {
-      if (withoutMoved[index]?.bucketId === bucketId && !withoutMoved[index]?.archivedAt) {
-        return index;
-      }
+  const nextTasks = (() => {
+    if (beforeTask) {
+      const insertAt = withoutMoved.findIndex((task) => task.id === beforeTask.id);
+      return [
+        ...withoutMoved.slice(0, insertAt),
+        ...movedTasks,
+        ...withoutMoved.slice(insertAt),
+      ];
     }
-    return -1;
+
+    const lastBucketIndex = (() => {
+      for (let index = withoutMoved.length - 1; index >= 0; index -= 1) {
+        if (withoutMoved[index]?.bucketId === bucketId && !withoutMoved[index]?.archivedAt) {
+          return index;
+        }
+      }
+      return -1;
+    })();
+
+    if (lastBucketIndex >= 0) {
+      const insertAt = lastBucketIndex + 1;
+      return [
+        ...withoutMoved.slice(0, insertAt),
+        ...movedTasks,
+        ...withoutMoved.slice(insertAt),
+      ];
+    }
+
+    return [...withoutMoved, ...movedTasks];
   })();
 
-  if (lastBucketIndex >= 0) {
-    const insertAt = lastBucketIndex + 1;
-    return [
-      ...withoutMoved.slice(0, insertAt),
-      ...movedTasks,
-      ...withoutMoved.slice(insertAt),
-    ];
-  }
-
-  return [...withoutMoved, ...movedTasks];
+  return areSameTaskPositions(tasks, nextTasks, selectedTaskIds, bucketId) ? tasks : nextTasks;
 };
 
 export const plannerReducerV2 = (
@@ -233,7 +275,7 @@ export const plannerReducerV2 = (
   switch (action.type) {
     case 'ADD_PROJECT': {
       if (!action.project.name.trim()) return state;
-      if (state.projects.some((project) => project.id === action.project.id)) return state;
+      if (hasPlannerDataV2Id(state, action.project.id)) return state;
       return {
         ...state,
         projects: normalizePinnedOrder([...state.projects, action.project]),
@@ -243,6 +285,8 @@ export const plannerReducerV2 = (
     case 'RENAME_PROJECT': {
       const name = action.name.trim();
       if (!name) return state;
+      const project = state.projects.find((item) => item.id === action.projectId);
+      if (!project || project.name === name) return state;
       return {
         ...state,
         projects: state.projects.map((project) => (
@@ -253,17 +297,22 @@ export const plannerReducerV2 = (
       };
     }
 
-    case 'UPDATE_PROJECT_DESCRIPTION':
+    case 'UPDATE_PROJECT_DESCRIPTION': {
+      const description = action.description.trim();
+      const project = state.projects.find((item) => item.id === action.projectId);
+      if (!project || project.description === description) return state;
       return {
         ...state,
         projects: state.projects.map((project) => (
           project.id === action.projectId
-            ? { ...project, description: action.description.trim(), updatedAt: action.updatedAt }
+            ? { ...project, description, updatedAt: action.updatedAt }
             : project
         )),
       };
+    }
 
-    case 'TOGGLE_PROJECT_PIN':
+    case 'TOGGLE_PROJECT_PIN': {
+      if (!state.projects.some((project) => project.id === action.projectId)) return state;
       return {
         ...state,
         projects: togglePinnedWithOrder(state.projects, action.projectId, (project, pinned) => ({
@@ -272,12 +321,16 @@ export const plannerReducerV2 = (
           updatedAt: action.updatedAt,
         })),
       };
+    }
 
-    case 'MOVE_PROJECT':
+    case 'MOVE_PROJECT': {
+      const projects = moveWithPinnedOrder(state.projects, action.projectId, action.targetIndex);
+      if (projects === state.projects) return state;
       return {
         ...state,
-        projects: moveWithPinnedOrder(state.projects, action.projectId, action.targetIndex),
+        projects,
       };
+    }
 
     case 'DELETE_PROJECT': {
       if (state.projects.length <= 1) return state;
@@ -294,7 +347,7 @@ export const plannerReducerV2 = (
       const name = action.bucket.name.trim();
       if (!name) return state;
       if (!state.projects.some((project) => project.id === action.bucket.projectId)) return state;
-      if (state.buckets.some((bucket) => bucket.id === action.bucket.id)) return state;
+      if (hasPlannerDataV2Id(state, action.bucket.id)) return state;
       const projectBuckets = state.buckets.filter((bucket) => bucket.projectId === action.bucket.projectId);
       return replaceProjectBuckets(
         state,
@@ -304,6 +357,8 @@ export const plannerReducerV2 = (
     }
 
     case 'MOVE_BUCKET': {
+      if (!state.projects.some((project) => project.id === action.projectId)) return state;
+      if (!state.buckets.some((bucket) => bucket.id === action.bucketId && bucket.projectId === action.projectId)) return state;
       const projectBuckets = state.buckets.filter((bucket) => bucket.projectId === action.projectId);
       return replaceProjectBuckets(
         state,
@@ -313,6 +368,7 @@ export const plannerReducerV2 = (
     }
 
     case 'TOGGLE_BUCKET_PIN': {
+      if (!state.buckets.some((bucket) => bucket.id === action.bucketId && bucket.projectId === action.projectId)) return state;
       const projectBuckets = state.buckets.filter((bucket) => bucket.projectId === action.projectId);
       return replaceProjectBuckets(
         state,
@@ -328,6 +384,8 @@ export const plannerReducerV2 = (
     case 'RENAME_BUCKET': {
       const name = action.name.trim();
       if (!name) return state;
+      const bucket = state.buckets.find((item) => item.id === action.bucketId && item.projectId === action.projectId);
+      if (!bucket || bucket.name === name) return state;
       return {
         ...state,
         buckets: state.buckets.map((bucket) => (
@@ -338,7 +396,8 @@ export const plannerReducerV2 = (
       };
     }
 
-    case 'DELETE_BUCKET':
+    case 'DELETE_BUCKET': {
+      if (!state.buckets.some((bucket) => bucket.id === action.bucketId && bucket.projectId === action.projectId)) return state;
       return {
         ...state,
         buckets: state.buckets.filter(
@@ -350,13 +409,14 @@ export const plannerReducerV2 = (
             : task
         )),
       };
+    }
 
     case 'ADD_TASK': {
       const title = action.task.title.trim();
       if (!title) return state;
       if (!state.projects.some((project) => project.id === action.task.projectId)) return state;
       if (!bucketBelongsToProject(state, action.task.projectId, action.task.bucketId)) return state;
-      if (state.tasks.some((task) => task.id === action.task.id)) return state;
+      if (hasPlannerDataV2Id(state, action.task.id)) return state;
       const projectTasks = state.tasks.filter((task) => task.projectId === action.task.projectId);
       return replaceProjectTasks(
         state,
@@ -366,20 +426,22 @@ export const plannerReducerV2 = (
     }
 
     case 'ADD_TASK_BATCH': {
-      const tasks = action.tasks
-        .map((task) => ({
-          ...task,
-          title: task.title.trim(),
-          description: task.description.trim(),
-        }))
-        .filter((task) => Boolean(task.title));
+      const tasks = action.tasks.map((task) => ({
+        ...task,
+        title: task.title.trim(),
+        description: task.description.trim(),
+      }));
       if (tasks.length === 0) return state;
+      if (tasks.some((task) => !task.title)) return state;
       const projectId = tasks[0].projectId;
       if (!tasks.every((task) => task.projectId === projectId)) return state;
       if (!state.projects.some((project) => project.id === projectId)) return state;
       if (!tasks.every((task) => bucketBelongsToProject(state, projectId, task.bucketId))) return state;
-      const existingTaskIds = new Set(state.tasks.map((task) => task.id));
-      if (tasks.some((task) => existingTaskIds.has(task.id))) return state;
+      const incomingTaskIds = new Set<string>();
+      for (const task of tasks) {
+        if (incomingTaskIds.has(task.id) || hasPlannerDataV2Id(state, task.id)) return state;
+        incomingTaskIds.add(task.id);
+      }
       const projectTasks = state.tasks.filter((task) => task.projectId === projectId);
       return replaceProjectTasks(state, projectId, [...projectTasks, ...tasks]);
     }
@@ -388,6 +450,10 @@ export const plannerReducerV2 = (
       const title = action.draft.title.trim();
       if (!title) return state;
       if (!bucketBelongsToProject(state, action.projectId, action.draft.bucketId)) return state;
+      const task = state.tasks.find((item) => item.id === action.taskId && item.projectId === action.projectId);
+      const description = action.draft.description.trim();
+      if (!task) return state;
+      if (task.title === title && task.description === description && task.bucketId === action.draft.bucketId) return state;
       return {
         ...state,
         tasks: state.tasks.map((task) => (
@@ -395,7 +461,7 @@ export const plannerReducerV2 = (
             ? {
               ...task,
               title,
-              description: action.draft.description.trim(),
+              description,
               bucketId: action.draft.bucketId,
               updatedAt: action.updatedAt,
             }
@@ -404,7 +470,8 @@ export const plannerReducerV2 = (
       };
     }
 
-    case 'TOGGLE_TASK_PIN':
+    case 'TOGGLE_TASK_PIN': {
+      if (!state.tasks.some((task) => task.id === action.taskId && task.projectId === action.projectId)) return state;
       return {
         ...state,
         tasks: state.tasks.map((task) => (
@@ -413,14 +480,18 @@ export const plannerReducerV2 = (
             : task
         )),
       };
+    }
 
-    case 'DELETE_TASK':
+    case 'DELETE_TASK': {
+      if (!state.tasks.some((task) => task.id === action.taskId && task.projectId === action.projectId)) return state;
       return {
         ...state,
         tasks: state.tasks.filter((task) => !(task.id === action.taskId && task.projectId === action.projectId)),
       };
+    }
 
-    case 'TOGGLE_TASK':
+    case 'TOGGLE_TASK': {
+      if (!state.tasks.some((task) => task.id === action.taskId && task.projectId === action.projectId)) return state;
       return {
         ...state,
         tasks: state.tasks.map((task) => (
@@ -434,6 +505,7 @@ export const plannerReducerV2 = (
             : task
         )),
       };
+    }
 
     case 'MOVE_TASK': {
       if (!bucketBelongsToProject(state, action.projectId, action.bucketId)) return state;
@@ -449,9 +521,10 @@ export const plannerReducerV2 = (
 
     case 'MOVE_TASKS': {
       if (!bucketBelongsToProject(state, action.projectId, action.bucketId)) return state;
+      if (new Set(action.taskIds).size !== action.taskIds.length) return state;
       const selectedTaskIds = new Set(action.taskIds);
       const selectedTasks = state.tasks.filter((task) => selectedTaskIds.has(task.id));
-      if (selectedTasks.length === 0) return state;
+      if (selectedTasks.length !== action.taskIds.length) return state;
       if (!selectedTasks.every((task) => task.projectId === action.projectId)) return state;
       const projectTasks = state.tasks.filter((item) => item.projectId === action.projectId);
       return replaceProjectTasks(
@@ -461,7 +534,8 @@ export const plannerReducerV2 = (
       );
     }
 
-    case 'ARCHIVE_COMPLETED_TASKS':
+    case 'ARCHIVE_COMPLETED_TASKS': {
+      if (!state.tasks.some((task) => task.projectId === action.projectId && task.completed && !task.archivedAt)) return state;
       return {
         ...state,
         tasks: state.tasks.map((task) => (
@@ -470,8 +544,11 @@ export const plannerReducerV2 = (
             : task
         )),
       };
+    }
 
-    case 'UNARCHIVE_TASK':
+    case 'UNARCHIVE_TASK': {
+      const task = state.tasks.find((item) => item.id === action.taskId && item.projectId === action.projectId);
+      if (!task || task.archivedAt === null) return state;
       return {
         ...state,
         tasks: state.tasks.map((task) => (
@@ -485,8 +562,10 @@ export const plannerReducerV2 = (
             : task
         )),
       };
+    }
 
     case 'REPLACE_DATA':
+      if (action.data === state) return state;
       validatePlannerDataV2Integrity(action.data);
       return action.data;
 
