@@ -30,3 +30,22 @@ export interface TaskDraft {
   description: string;
   bucketId: string | null;
 }
+
+// ============================================================================
+// v2 SCHEMA TYPES (exported for reference; actual types in types/v2.ts)
+// ============================================================================
+export type {
+  Priority,
+  ResourceTag,
+  Project,
+  BucketTemplateDefinition,
+  BucketV2,
+  PlannerTaskV2,
+  PlannerDataV2,
+} from './types/v2';
+
+export {
+  PLANNER_DATA_V2_VERSION,
+  DEFAULT_PROJECT_ID,
+  createInitialPlannerDataV2,
+} from './types/v2';
