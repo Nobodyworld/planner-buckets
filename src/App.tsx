@@ -680,6 +680,12 @@ export default function App() {
     }
 
     const eligibleDefinitions = getDefinitionsForTemplate(templateId).filter((definition) => definition.defaultActive);
+
+    if (eligibleDefinitions.length === 0) {
+      setTemplateMessage('No buckets were created because this template has no default-active definitions.');
+      return;
+    }
+
     const missingDefinitions = eligibleDefinitions.filter((definition) => (
       !state.buckets.some((bucket) => (
         bucket.projectId === effectiveActiveProjectId && bucket.templateDefinitionId === definition.id
@@ -1044,13 +1050,29 @@ export default function App() {
     } else if (exportScope.startsWith('bucket:')) {
       const bucketId = exportScope.slice('bucket:'.length);
       const bucket = activeBuckets.find((item) => item.id === bucketId) ?? null;
+
+      // Collect template/definition for template-derived buckets
+      const templates: BucketTemplate[] = [];
+      const templateDefinitions: BucketTemplateDefinition[] = [];
+
+      if (bucket && bucket.templateDefinitionId !== null) {
+        const definition = state.templateDefinitions.find((d) => d.id === bucket.templateDefinitionId);
+        if (definition) {
+          templateDefinitions.push(definition);
+          const template = state.templates.find((t) => t.id === definition.templateId);
+          if (template) {
+            templates.push(template);
+          }
+        }
+      }
+
       dataToExport = {
         ...state,
         projects: [activeProject],
         buckets: bucket ? [bucket] : [],
         tasks: activeTasks.filter((task) => task.bucketId === bucketId),
-        templates: [],
-        templateDefinitions: [],
+        templates,
+        templateDefinitions,
       };
     }
 

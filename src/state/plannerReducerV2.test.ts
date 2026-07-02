@@ -596,6 +596,209 @@ describe('plannerReducerV2', () => {
     expect(result.current.state.buckets.filter((item) => item.templateDefinitionId !== null)).toHaveLength(2);
   });
 
+  it('moves templates downward correctly', () => {
+    const state = stateWithTemplate();
+    const withSecond = plannerReducerV2(state, {
+      type: 'ADD_TEMPLATE',
+      template: template('template-b', 'Ops'),
+    });
+    const withThird = plannerReducerV2(withSecond, {
+      type: 'ADD_TEMPLATE',
+      template: template('template-c', 'Planning'),
+    });
+
+    // Move first template down one position
+    const movedDown = plannerReducerV2(withThird, {
+      type: 'MOVE_TEMPLATE',
+      templateId: 'template-a',
+      targetIndex: 1,
+    });
+    expect(movedDown.templates.map((item) => item.id)).toEqual(['template-b', 'template-a', 'template-c']);
+  });
+
+  it('moves templates upward correctly', () => {
+    const state = stateWithTemplate();
+    const withSecond = plannerReducerV2(state, {
+      type: 'ADD_TEMPLATE',
+      template: template('template-b', 'Ops'),
+    });
+    const withThird = plannerReducerV2(withSecond, {
+      type: 'ADD_TEMPLATE',
+      template: template('template-c', 'Planning'),
+    });
+
+    // Move last template up to position 1
+    const movedUp = plannerReducerV2(withThird, {
+      type: 'MOVE_TEMPLATE',
+      templateId: 'template-c',
+      targetIndex: 1,
+    });
+    expect(movedUp.templates.map((item) => item.id)).toEqual(['template-a', 'template-c', 'template-b']);
+  });
+
+  it('respects boundary constraints for template movement', () => {
+    const state = stateWithTemplate();
+    const withSecond = plannerReducerV2(state, {
+      type: 'ADD_TEMPLATE',
+      template: template('template-b', 'Ops'),
+    });
+
+    // Try to move before 0 - should be no-op
+    const beforeZero = plannerReducerV2(withSecond, {
+      type: 'MOVE_TEMPLATE',
+      templateId: 'template-a',
+      targetIndex: -5,
+    });
+    expect(beforeZero).toBe(withSecond);
+
+    // Try to move past end - should be no-op
+    const pastEnd = plannerReducerV2(withSecond, {
+      type: 'MOVE_TEMPLATE',
+      templateId: 'template-b',
+      targetIndex: 100,
+    });
+    expect(pastEnd).toBe(withSecond);
+
+    // Try to move to same position - should be no-op
+    const samePos = plannerReducerV2(withSecond, {
+      type: 'MOVE_TEMPLATE',
+      templateId: 'template-a',
+      targetIndex: 0,
+    });
+    expect(samePos).toBe(withSecond);
+  });
+
+  it('moves definitions downward within template', () => {
+    const state = stateWithTemplate();
+
+    // Move first definition down to position 1
+    const movedDown = plannerReducerV2(state, {
+      type: 'MOVE_TEMPLATE_DEFINITION',
+      definitionId: 'definition-a',
+      targetIndex: 1,
+      updatedAt: timestamp,
+    });
+
+    const getDefinitionOrder = (s: PlannerDataV2) => s.templateDefinitions
+      .filter((item) => item.templateId === 'template-a')
+      .sort((left, right) => left.position - right.position)
+      .map((item) => item.id);
+
+    expect(getDefinitionOrder(movedDown)).toEqual(['definition-b', 'definition-a', 'definition-c']);
+  });
+
+  it('moves definitions upward within template', () => {
+    const state = stateWithTemplate();
+
+    // Move last definition up to position 1
+    const movedUp = plannerReducerV2(state, {
+      type: 'MOVE_TEMPLATE_DEFINITION',
+      definitionId: 'definition-c',
+      targetIndex: 1,
+      updatedAt: timestamp,
+    });
+
+    const getDefinitionOrder = (s: PlannerDataV2) => s.templateDefinitions
+      .filter((item) => item.templateId === 'template-a')
+      .sort((left, right) => left.position - right.position)
+      .map((item) => item.id);
+
+    expect(getDefinitionOrder(movedUp)).toEqual(['definition-a', 'definition-c', 'definition-b']);
+  });
+
+  it('respects boundary constraints for definition movement', () => {
+    const state = stateWithTemplate();
+
+    // Try to move first definition before 0 - should be no-op
+    const beforeZero = plannerReducerV2(state, {
+      type: 'MOVE_TEMPLATE_DEFINITION',
+      definitionId: 'definition-a',
+      targetIndex: -5,
+      updatedAt: timestamp,
+    });
+    expect(beforeZero).toBe(state);
+
+    // Try to move last definition past end - should be no-op
+    const pastEnd = plannerReducerV2(state, {
+      type: 'MOVE_TEMPLATE_DEFINITION',
+      definitionId: 'definition-c',
+      targetIndex: 100,
+      updatedAt: timestamp,
+    });
+    expect(pastEnd).toBe(state);
+
+    // Try to move missing definition - should be no-op
+    const missing = plannerReducerV2(state, {
+      type: 'MOVE_TEMPLATE_DEFINITION',
+      definitionId: 'missing-definition',
+      targetIndex: 0,
+      updatedAt: timestamp,
+    });
+    expect(missing).toBe(state);
+  });
+
+  it('undo and redo preserve downward movement of templates', () => {
+    const state = stateWithTemplate();
+    const withSecond = plannerReducerV2(state, {
+      type: 'ADD_TEMPLATE',
+      template: template('template-b', 'Ops'),
+    });
+
+    const { result } = renderHook(() => usePlannerHistory<PlannerDataV2, PlannerActionV2>(withSecond, plannerReducerV2));
+
+    act(() => {
+      result.current.dispatch({
+        type: 'MOVE_TEMPLATE',
+        templateId: 'template-a',
+        targetIndex: 1,
+      });
+    });
+
+    expect(result.current.state.templates.map((item) => item.id)).toEqual(['template-b', 'template-a']);
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.state).toBe(withSecond);
+
+    act(() => {
+      result.current.redo();
+    });
+    expect(result.current.state.templates.map((item) => item.id)).toEqual(['template-b', 'template-a']);
+  });
+
+  it('undo and redo preserve downward movement of definitions', () => {
+    const state = stateWithTemplate();
+
+    const { result } = renderHook(() => usePlannerHistory<PlannerDataV2, PlannerActionV2>(state, plannerReducerV2));
+
+    const getDefinitionOrder = (s: PlannerDataV2) => s.templateDefinitions
+      .filter((item) => item.templateId === 'template-a')
+      .sort((left, right) => left.position - right.position)
+      .map((item) => item.id);
+
+    act(() => {
+      result.current.dispatch({
+        type: 'MOVE_TEMPLATE_DEFINITION',
+        definitionId: 'definition-a',
+        targetIndex: 1,
+        updatedAt: timestamp,
+      });
+    });
+
+    expect(getDefinitionOrder(result.current.state)).toEqual(['definition-b', 'definition-a', 'definition-c']);
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(getDefinitionOrder(result.current.state)).toEqual(['definition-a', 'definition-b', 'definition-c']);
+
+    act(() => {
+      result.current.redo();
+    });
+    expect(getDefinitionOrder(result.current.state)).toEqual(['definition-b', 'definition-a', 'definition-c']);
+  });
+
   it('rejects template and definition global ID collisions without history entries', () => {
     const state = stateWithTemplate();
     expect(plannerReducerV2(state, { type: 'ADD_TEMPLATE', template: template('bucket-a') })).toBe(state);

@@ -204,4 +204,84 @@ describe('getGlobalBucketView', () => {
 
     expect(() => getGlobalBucketView(data)).toThrow('missing template definition');
   });
+
+  it('rejects data with orphan buckets (bucket with missing project)', () => {
+    const data = createData();
+    data.buckets[0] = {
+      ...data.buckets[0],
+      projectId: 'missing-project',
+    };
+
+    expect(() => getGlobalBucketView(data)).toThrow();
+  });
+
+  it('rejects data with orphan tasks (task with missing project)', () => {
+    const data = createData();
+    data.tasks[0] = {
+      ...data.tasks[0],
+      projectId: 'missing-project',
+    };
+
+    expect(() => getGlobalBucketView(data)).toThrow();
+  });
+
+  it('rejects data with task referencing missing bucket', () => {
+    const data = createData();
+    data.tasks[0] = {
+      ...data.tasks[0],
+      bucketId: 'missing-bucket',
+    };
+
+    expect(() => getGlobalBucketView(data)).toThrow();
+  });
+
+  it('rejects data with task-project and bucket-project mismatch', () => {
+    const data = createData();
+    data.tasks[0] = {
+      ...data.tasks[0],
+      projectId: 'project-b',
+      bucketId: 'bucket-alpha-ready', // bucket belongs to project-a
+    };
+
+    expect(() => getGlobalBucketView(data)).toThrow();
+  });
+
+  it('rejects data with missing template for definition', () => {
+    const data = createData();
+    data.templateDefinitions[0] = {
+      ...data.templateDefinitions[0],
+      templateId: 'missing-template',
+    };
+
+    expect(() => getGlobalBucketView(data)).toThrow();
+  });
+
+  it('rejects data with missing definition in bucket reference', () => {
+    const data = createData();
+    data.buckets[0] = {
+      ...data.buckets[0],
+      templateDefinitionId: 'missing-definition',
+    };
+
+    expect(() => getGlobalBucketView(data)).toThrow();
+  });
+
+  it('rejects data with duplicate IDs across entity types', () => {
+    const data = createData();
+    const duplicateId = data.projects[0].id;
+    data.buckets[0] = {
+      ...data.buckets[0],
+      id: duplicateId,
+    };
+
+    expect(() => getGlobalBucketView(data)).toThrow();
+  });
+
+  it('accepts valid data with template-linked buckets', () => {
+    const data = createData();
+    // This should not throw
+    const result = getGlobalBucketView(data);
+    expect(result).toBeDefined();
+    expect(result.length).toBeGreaterThan(0);
+  });
 });

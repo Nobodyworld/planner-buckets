@@ -68,13 +68,19 @@ const moveWithOrder = <Item extends { id: string }>(
 ): Item[] => {
   const sourceIndex = items.findIndex((item) => item.id === itemId);
   if (sourceIndex < 0) return items;
+
+  // Clamp targetIndex to valid range [0, items.length - 1]
+  const clampedTargetIndex = Math.max(0, Math.min(targetIndex, items.length - 1));
+  if (sourceIndex === clampedTargetIndex) return items; // No-op: already at target
+
+  // Remove the item from its current position
   const withoutMoved = items.filter((item) => item.id !== itemId);
-  const adjustedTargetIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
-  const safeIndex = Math.max(0, Math.min(adjustedTargetIndex, withoutMoved.length));
+
+  // Insert at the target index in the reduced array
   const nextItems = [
-    ...withoutMoved.slice(0, safeIndex),
+    ...withoutMoved.slice(0, clampedTargetIndex),
     items[sourceIndex],
-    ...withoutMoved.slice(safeIndex),
+    ...withoutMoved.slice(clampedTargetIndex),
   ];
 
   return areSameIdOrder(items, nextItems) ? items : nextItems;

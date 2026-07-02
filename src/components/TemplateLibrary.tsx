@@ -71,16 +71,14 @@ export function TemplateLibrary({
   }, [selectedTemplate?.id, selectedTemplate?.name, selectedTemplate?.description]);
 
   useEffect(() => {
-    setDefinitionDrafts((current) => {
-      const next: Record<string, { name: string; description: string }> = {};
-      for (const definition of selectedDefinitions) {
-        next[definition.id] = current[definition.id] ?? {
-          name: definition.name,
-          description: definition.description,
-        };
-      }
-      return next;
-    });
+    const next: Record<string, { name: string; description: string }> = {};
+    for (const definition of selectedDefinitions) {
+      next[definition.id] = {
+        name: definition.name,
+        description: definition.description,
+      };
+    }
+    setDefinitionDrafts(next);
   }, [selectedDefinitions]);
 
   const submitCreateTemplate = () => {

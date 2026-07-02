@@ -1,4 +1,5 @@
 import type { BucketTemplate, BucketTemplateDefinition, BucketV2, PlannerDataV2, Project } from '../types/v2';
+import { validatePlannerDataV2Integrity } from '../types/validators';
 
 export interface BucketTaskCounts {
     open: number;
@@ -32,6 +33,8 @@ const addTaskCounts = (left: BucketTaskCounts, right: BucketTaskCounts): BucketT
 });
 
 export const getGlobalBucketView = (data: PlannerDataV2): GlobalBucketViewGroup[] => {
+    validatePlannerDataV2Integrity(data);
+
     const templatesById = new Map(data.templates.map((template) => [template.id, template]));
     const definitionsById = new Map(data.templateDefinitions.map((definition) => [definition.id, definition]));
     const projectsById = new Map(data.projects.map((project) => [project.id, project]));

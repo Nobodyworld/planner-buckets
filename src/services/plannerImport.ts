@@ -196,10 +196,14 @@ export const mergeUploadedPlannerDataV2 = (
     const bucketIdMap = new Map<string, string | null>();
     const currentProjectBuckets = current.buckets.filter((bucket) => bucket.projectId === options.targetProjectId);
     const bucketsByName = new Map<string, BucketV2>();
+    const bucketsByDefinitionId = new Map<string, BucketV2>();
     const currentDefinitionIds = new Set(current.templateDefinitions.map((definition) => definition.id));
 
     currentProjectBuckets.forEach((bucket) => {
         bucketsByName.set(normalizeBucketName(bucket.name), bucket);
+        if (bucket.templateDefinitionId !== null) {
+            bucketsByDefinitionId.set(bucket.templateDefinitionId, bucket);
+        }
     });
 
     const mergedBuckets = [...current.buckets];
@@ -207,6 +211,17 @@ export const mergeUploadedPlannerDataV2 = (
     let mergedIntoExistingBucketCount = 0;
 
     incoming.buckets.forEach((bucket) => {
+        // Priority 1: If incoming bucket references an existing definition, find existing bucket with that definition
+        if (bucket.templateDefinitionId && currentDefinitionIds.has(bucket.templateDefinitionId)) {
+            const existingDefinitionBucket = bucketsByDefinitionId.get(bucket.templateDefinitionId);
+            if (existingDefinitionBucket) {
+                bucketIdMap.set(bucket.id, existingDefinitionBucket.id);
+                mergedIntoExistingBucketCount += 1;
+                return;
+            }
+        }
+
+        // Priority 2: Fall back to name-based matching
         const normalizedName = normalizeBucketName(bucket.name) || 'untitled bucket';
         const existingBucket = bucketsByName.get(normalizedName) ?? null;
 
@@ -216,6 +231,7 @@ export const mergeUploadedPlannerDataV2 = (
             return;
         }
 
+        // Priority 3: Create new bucket
         const mergedBucket: BucketV2 = {
             ...bucket,
             id: createUniquePlannerId(existingIds, createUniqueId),
@@ -228,6 +244,9 @@ export const mergeUploadedPlannerDataV2 = (
 
         bucketIdMap.set(bucket.id, mergedBucket.id);
         bucketsByName.set(normalizedName, mergedBucket);
+        if (mergedBucket.templateDefinitionId !== null) {
+            bucketsByDefinitionId.set(mergedBucket.templateDefinitionId, mergedBucket);
+        }
         mergedBuckets.push(mergedBucket);
         createdBucketCount += 1;
     });

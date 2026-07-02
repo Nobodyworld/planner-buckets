@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlannerData } from '../types';
-import type { PlannerDataV2 } from '../types/v2';
+import type { BucketV2, PlannerDataV2, PlannerTaskV2 } from '../types/v2';
 import { PLANNER_DATA_V2_VERSION } from '../types/v2';
 import { coercePlannerDataToV2, mergeUploadedPlannerDataV2 } from './plannerImport';
 
@@ -199,5 +199,295 @@ describe('plannerImport v2 compatibility', () => {
         expect(result.data.buckets.find((bucket) => bucket.id === 'bucket-missing-copy')?.templateDefinitionId).toBeNull();
         expect(result.data.templates).toEqual(current.templates);
         expect(result.data.templateDefinitions).toEqual(current.templateDefinitions);
+    });
+
+    it('maps same definition with different bucket name to existing linked bucket', () => {
+        const current = createCurrentV2();
+        // Add a bucket linked to definition-current
+        const existingLinkedBucket: BucketV2 = {
+            id: 'bucket-existing-linked',
+            projectId: 'project-current',
+            name: 'Ready',
+            description: '',
+            templateDefinitionId: 'definition-current',
+            priority: 0,
+            pinned: false,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+        };
+        const currentWithLinked = {
+            ...current,
+            buckets: [...current.buckets, existingLinkedBucket],
+        };
+
+        const incoming: PlannerDataV2 = {
+            ...current,
+            buckets: [
+                {
+                    id: 'incoming-bucket',
+                    projectId: 'project-current',
+                    name: 'Different Name', // Different name but same definition
+                    description: '',
+                    templateDefinitionId: 'definition-current',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            tasks: [],
+        };
+
+        const result = mergeUploadedPlannerDataV2(currentWithLinked, incoming, {
+            targetProjectId: 'project-current',
+        });
+
+        expect(result.mergedIntoExistingBucketCount).toBe(1);
+        expect(result.createdBucketCount).toBe(0);
+        expect(result.data.buckets.filter((b) => b.projectId === 'project-current' && b.templateDefinitionId === 'definition-current')).toHaveLength(1);
+    });
+
+    it('creates new linked bucket if definition exists but no bucket exists for it yet', () => {
+        const current = createCurrentV2();
+        // No existing bucket for definition-current
+
+        const incoming: PlannerDataV2 = {
+            ...current,
+            buckets: [
+                {
+                    id: 'incoming-bucket',
+                    projectId: 'project-current',
+                    name: 'New Ready',
+                    description: '',
+                    templateDefinitionId: 'definition-current',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            tasks: [],
+        };
+
+        const result = mergeUploadedPlannerDataV2(current, incoming, {
+            targetProjectId: 'project-current',
+            createUniqueId: () => 'bucket-created-for-definition',
+        });
+
+        expect(result.createdBucketCount).toBe(1);
+        expect(result.data.buckets.find((b) => b.id === 'bucket-created-for-definition')?.templateDefinitionId).toBe('definition-current');
+    });
+
+    it('remaps tasks to existing linked bucket when merging same definition', () => {
+        const current = createCurrentV2();
+        const existingBucket: BucketV2 = {
+            id: 'bucket-existing',
+            projectId: 'project-current',
+            name: 'Ready',
+            description: '',
+            templateDefinitionId: 'definition-current',
+            priority: 0,
+            pinned: false,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+        };
+        const currentWithBucket = {
+            ...current,
+            buckets: [...current.buckets, existingBucket],
+        };
+
+        const incomingBucket: BucketV2 = {
+            id: 'bucket-incoming',
+            projectId: 'project-current',
+            name: 'Different Name',
+            description: '',
+            templateDefinitionId: 'definition-current',
+            priority: 0,
+            pinned: false,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+        };
+
+        const incomingTask: PlannerTaskV2 = {
+            id: 'task-incoming',
+            projectId: 'project-current',
+            bucketId: 'bucket-incoming',
+            title: 'Incoming task',
+            description: '',
+            completed: false,
+            archivedAt: null,
+            priority: 0,
+            pinned: false,
+            resourceTags: [],
+            createdAt: timestamp,
+            updatedAt: timestamp,
+        };
+
+        const incoming: PlannerDataV2 = {
+            version: PLANNER_DATA_V2_VERSION,
+            projects: current.projects,
+            templates: current.templates,
+            templateDefinitions: current.templateDefinitions,
+            buckets: [incomingBucket],
+            tasks: [incomingTask],
+        };
+
+        const result = mergeUploadedPlannerDataV2(currentWithBucket, incoming, {
+            targetProjectId: 'project-current',
+        });
+
+        // Should map incoming bucket to existing bucket with same definition
+        expect(result.mergedIntoExistingBucketCount).toBe(1);
+        expect(result.createdBucketCount).toBe(0);
+        // Task should be remapped to existing bucket
+        const uploadedTask = result.data.tasks.find((t) => t.projectId === 'project-current' && t.title === 'Incoming task');
+        expect(uploadedTask?.bucketId).toBe('bucket-existing');
+    });
+
+    it('prevents duplicate linked buckets in one project', () => {
+        const current = createCurrentV2();
+        const existingBucket: BucketV2 = {
+            id: 'bucket-existing',
+            projectId: 'project-current',
+            name: 'Ready',
+            description: '',
+            templateDefinitionId: 'definition-current',
+            priority: 0,
+            pinned: false,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+        };
+        const currentWithBucket = {
+            ...current,
+            buckets: [...current.buckets, existingBucket],
+        };
+
+        const incoming: PlannerDataV2 = {
+            ...current,
+            buckets: [
+                {
+                    id: 'bucket-incoming-1',
+                    projectId: 'project-current',
+                    name: 'Ready v1',
+                    description: '',
+                    templateDefinitionId: 'definition-current',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+                {
+                    id: 'bucket-incoming-2',
+                    projectId: 'project-current',
+                    name: 'Ready v2',
+                    description: '',
+                    templateDefinitionId: 'definition-current',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            tasks: [],
+        };
+
+        const result = mergeUploadedPlannerDataV2(currentWithBucket, incoming, {
+            targetProjectId: 'project-current',
+        });
+
+        // Both incoming buckets should map to the existing bucket, not create new ones
+        expect(result.mergedIntoExistingBucketCount).toBe(2);
+        expect(result.createdBucketCount).toBe(0);
+        expect(result.data.buckets.filter((b) => b.projectId === 'project-current' && b.templateDefinitionId === 'definition-current')).toHaveLength(1);
+    });
+
+    it('uses same definition in different projects', () => {
+        const current: PlannerDataV2 = {
+            version: PLANNER_DATA_V2_VERSION,
+            projects: [
+                {
+                    id: 'project-a',
+                    name: 'Project A',
+                    description: '',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+                {
+                    id: 'project-b',
+                    name: 'Project B',
+                    description: '',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            buckets: [
+                {
+                    id: 'bucket-a',
+                    projectId: 'project-a',
+                    name: 'Ready',
+                    description: '',
+                    templateDefinitionId: 'definition-ready',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            tasks: [],
+            templates: [
+                {
+                    id: 'template-shared',
+                    name: 'Shared',
+                    description: '',
+                    active: true,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            templateDefinitions: [
+                {
+                    id: 'definition-ready',
+                    templateId: 'template-shared',
+                    name: 'Ready',
+                    description: '',
+                    priority: 0,
+                    defaultActive: true,
+                    position: 0,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+        };
+
+        const incoming: PlannerDataV2 = {
+            ...current,
+            buckets: [
+                {
+                    id: 'bucket-incoming',
+                    projectId: 'project-b',
+                    name: 'Ready',
+                    description: '',
+                    templateDefinitionId: 'definition-ready',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+        };
+
+        const result = mergeUploadedPlannerDataV2(current, incoming, {
+            targetProjectId: 'project-b',
+            createUniqueId: () => 'bucket-b-ready',
+        });
+
+        // Should create a new bucket for project-b even though project-a has the same definition
+        expect(result.createdBucketCount).toBe(1);
+        expect(result.data.buckets.filter((b) => b.templateDefinitionId === 'definition-ready')).toHaveLength(2);
+        expect(result.data.buckets.find((b) => b.id === 'bucket-b-ready')?.projectId).toBe('project-b');
     });
 });
