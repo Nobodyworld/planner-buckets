@@ -195,4 +195,40 @@ describe('plannerPersistence v2 activation', () => {
         expect(JSON.parse(localStorage.getItem(PLANNER_STORAGE_KEY_V2) ?? '{}')).toEqual(v2Data);
         expect(localStorage.getItem(PLANNER_STORAGE_KEY_V1)).toBe(rawV1);
     });
+
+    it('preserves templates and definitions through a v2 localStorage round trip', () => {
+        const v2Data: PlannerDataV2 = {
+            ...createV2Data(),
+            templates: [
+                {
+                    id: 'template-a',
+                    name: 'Template A',
+                    description: 'Reusable',
+                    active: true,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            templateDefinitions: [
+                {
+                    id: 'definition-a',
+                    templateId: 'template-a',
+                    name: 'Definition A',
+                    description: 'Bucket setup',
+                    priority: 0,
+                    defaultActive: true,
+                    position: 0,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+        };
+
+        savePlannerDataV2ToLocalStorage(v2Data);
+
+        const result = loadPlannerDataV2FromLocalStorage(() => timestamp);
+        expect(result.source).toBe('v2');
+        expect(result.data.templates).toEqual(v2Data.templates);
+        expect(result.data.templateDefinitions).toEqual(v2Data.templateDefinitions);
+    });
 });

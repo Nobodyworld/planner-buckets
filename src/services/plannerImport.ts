@@ -196,6 +196,7 @@ export const mergeUploadedPlannerDataV2 = (
     const bucketIdMap = new Map<string, string | null>();
     const currentProjectBuckets = current.buckets.filter((bucket) => bucket.projectId === options.targetProjectId);
     const bucketsByName = new Map<string, BucketV2>();
+    const currentDefinitionIds = new Set(current.templateDefinitions.map((definition) => definition.id));
 
     currentProjectBuckets.forEach((bucket) => {
         bucketsByName.set(normalizeBucketName(bucket.name), bucket);
@@ -220,7 +221,9 @@ export const mergeUploadedPlannerDataV2 = (
             id: createUniquePlannerId(existingIds, createUniqueId),
             projectId: options.targetProjectId,
             name: bucket.name.trim() || 'Untitled bucket',
-            templateDefinitionId: null,
+            templateDefinitionId: bucket.templateDefinitionId && currentDefinitionIds.has(bucket.templateDefinitionId)
+                ? bucket.templateDefinitionId
+                : null,
         };
 
         bucketIdMap.set(bucket.id, mergedBucket.id);

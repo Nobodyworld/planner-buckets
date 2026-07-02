@@ -129,6 +129,62 @@ const plannerV2Fixture: PlannerDataV2 = {
     templateDefinitions: [],
 };
 
+const plannerV2TemplateFixture: PlannerDataV2 = {
+    ...plannerV2Fixture,
+    templates: [
+        {
+            id: 'template-launch',
+            name: 'Launch Template',
+            description: '',
+            active: true,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+    ],
+    templateDefinitions: [
+        {
+            id: 'definition-ready',
+            templateId: 'template-launch',
+            name: 'Ready',
+            description: 'Ready work',
+            priority: 0,
+            defaultActive: true,
+            position: 0,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+        {
+            id: 'definition-done',
+            templateId: 'template-launch',
+            name: 'Done',
+            description: 'Done work',
+            priority: 0,
+            defaultActive: true,
+            position: 1,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+    ],
+};
+
+const plannerV2PartialTemplateFixture: PlannerDataV2 = {
+    ...plannerV2TemplateFixture,
+    buckets: [
+        ...plannerV2TemplateFixture.buckets,
+        {
+            id: 'bucket-ready-existing',
+            projectId: 'project-b',
+            name: 'Ready',
+            description: 'Ready work',
+            templateDefinitionId: 'definition-ready',
+            priority: 0,
+            pinned: false,
+            createdAt: '2026-01-04T00:00:00.000Z',
+            updatedAt: '2026-01-04T00:00:00.000Z',
+        },
+    ],
+};
+
 const seedPlannerData = (data: PlannerData = plannerFixture) => {
     localStorage.setItem(V1_STORAGE_KEY, JSON.stringify(data));
 };
@@ -598,6 +654,135 @@ describe('App integration', () => {
             const saved = readRuntimePlannerData();
             expect(saved.projects.map((project) => project.id)).toEqual(['project-a', 'project-b']);
             expect(saved.tasks.find((task) => task.id === 'task-beta')?.projectId).toBe('project-b');
+        });
+    });
+
+    it('applies a template to the active project and supports undo and redo', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2TemplateFixture);
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Apply to Beta' }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { name: 'Ready' })).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Done' })).toBeInTheDocument();
+        });
+
+        let saved = readRuntimePlannerData();
+        expect(saved.buckets.filter((bucket) => bucket.projectId === 'project-b' && bucket.templateDefinitionId !== null).map((bucket) => bucket.templateDefinitionId)).toEqual(['definition-ready', 'definition-done']);
+        expect(screen.getAllByText('Ready')).toHaveLength(2);
+        expect(screen.getAllByText(/0 open \/ 0 complete \/ 0 archived/)).toHaveLength(2);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+        await waitFor(() => {
+            saved = readRuntimePlannerData();
+            expect(saved.buckets.some((bucket) => bucket.templateDefinitionId === 'definition-ready' && bucket.projectId === 'project-b')).toBe(false);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+
+        await waitFor(() => {
+            saved = readRuntimePlannerData();
+            expect(saved.buckets.some((bucket) => bucket.templateDefinitionId === 'definition-ready' && bucket.projectId === 'project-b')).toBe(true);
+        });
+    });
+
+    it('blocks referenced template deletion and reports complete reapply no-op', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2TemplateFixture);
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Apply to Beta' }));
+        await waitFor(() => {
+            expect(readRuntimePlannerData().buckets.some((bucket) => bucket.templateDefinitionId === 'definition-ready')).toBe(true);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+        expect(screen.getByText('Template deletion blocked because project buckets still reference one or more definitions.')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Apply to Beta' }));
+        expect(screen.getByText('No new buckets were created; all active definitions already exist in this project.')).toBeInTheDocument();
+    });
+
+    it('reports inactive templates and partial reapplication', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2PartialTemplateFixture);
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Apply to Beta' }));
+        await waitFor(() => {
+            expect(screen.getByText('Applied 1 of 2 eligible bucket definitions to Beta.')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Apply to Beta' }));
+        expect(screen.getByText('Inactive templates cannot be applied.')).toBeInTheDocument();
+    });
+
+    it('creates and edits templates and definitions from the Template Library', async () => {
+        render(<App />);
+
+        fireEvent.change(screen.getByLabelText('New template name'), { target: { value: 'Ops Template' } });
+        fireEvent.keyDown(screen.getByLabelText('New template name'), { key: 'Enter' });
+
+        await waitFor(() => {
+            expect(readRuntimePlannerData().templates.some((template) => template.name === 'Ops Template')).toBe(true);
+        });
+
+        fireEvent.change(screen.getByLabelText('Template name'), { target: { value: 'Ops Template 2' } });
+        fireEvent.blur(screen.getByLabelText('Template name'));
+        fireEvent.change(screen.getByLabelText('Template description'), { target: { value: 'Ops notes' } });
+        fireEvent.blur(screen.getByLabelText('Template description'));
+
+        fireEvent.change(screen.getByLabelText('New template definition name'), { target: { value: 'Follow Up' } });
+        fireEvent.keyDown(screen.getByLabelText('New template definition name'), { key: 'Enter' });
+
+        await waitFor(() => {
+            const saved = readRuntimePlannerData();
+            expect(saved.templates.find((template) => template.name === 'Ops Template 2')?.description).toBe('Ops notes');
+            expect(saved.templateDefinitions.some((definition) => definition.name === 'Follow Up')).toBe(true);
+        });
+    });
+
+    it('exports and restores full v2 JSON with templates', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2TemplateFixture);
+        let exportedBlob: Blob | null = null;
+        Object.defineProperty(URL, 'createObjectURL', {
+            value: vi.fn((blob: Blob) => {
+                exportedBlob = blob;
+                return 'blob:planner-template-export';
+            }),
+            configurable: true,
+        });
+        Object.defineProperty(URL, 'revokeObjectURL', {
+            value: vi.fn(),
+            configurable: true,
+        });
+        vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+        render(<App />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
+        const exported = JSON.parse(await exportedBlob!.text()) as PlannerDataV2;
+        expect(exported.templates.map((template) => template.id)).toEqual(['template-launch']);
+        expect(exported.templateDefinitions.map((definition) => definition.id)).toEqual(['definition-ready', 'definition-done']);
+
+        const restoreFile = new File([JSON.stringify(plannerV2TemplateFixture)], 'templates.json', { type: 'application/json' });
+        fireEvent.change(screen.getByLabelText('Restore planner data from JSON'), {
+            target: { files: [restoreFile] },
+        });
+        await waitFor(() => {
+            expect(screen.getByText('Restore 3 task(s) and 2 bucket(s) and replace current planner?')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm restore' }));
+        await waitFor(() => {
+            expect(readRuntimePlannerData().templates.map((template) => template.id)).toEqual(['template-launch']);
         });
     });
 });

@@ -3054,3 +3054,67 @@ h1 {
   min-width: 0;
   flex: 1;
 }
+
+.template-library {
+  display: grid;
+  gap: 10px;
+}
+
+.template-library-header,
+.template-row-actions,
+.template-create-row,
+.template-apply-row,
+.template-definition-actions,
+.global-bucket-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-library-header,
+.global-bucket-group-header {
+  justify-content: space-between;
+}
+
+.template-select-label,
+.template-edit-grid,
+.template-definition-list,
+.template-definition-row,
+.global-bucket-view {
+  display: grid;
+  gap: 8px;
+}
+
+.template-row-actions,
+.template-definition-actions {
+  flex-wrap: wrap;
+}
+
+.template-create-row input {
+  min-width: 0;
+  flex: 1;
+}
+
+.template-edit-grid textarea,
+.template-definition-row textarea {
+  min-height: 54px;
+  resize: vertical;
+}
+
+.template-definition-row,
+.global-bucket-group {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface) 86%, var(--surface-2) 14%);
+}
+
+.global-bucket-view h3 {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+}
+
+.global-bucket-group ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}

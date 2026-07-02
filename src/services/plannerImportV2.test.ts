@@ -33,8 +33,29 @@ const createCurrentV2 = (): PlannerDataV2 => ({
         },
     ],
     tasks: [],
-    templates: [],
-    templateDefinitions: [],
+    templates: [
+        {
+            id: 'template-current',
+            name: 'Current Template',
+            description: '',
+            active: true,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+        },
+    ],
+    templateDefinitions: [
+        {
+            id: 'definition-current',
+            templateId: 'template-current',
+            name: 'Current Definition',
+            description: '',
+            priority: 0,
+            defaultActive: true,
+            position: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+        },
+    ],
 });
 
 const createV1Upload = (): PlannerData => ({
@@ -97,5 +118,86 @@ describe('plannerImport v2 compatibility', () => {
         expect(result.data.buckets.find((bucket) => bucket.id === 'bucket-imported')?.projectId).toBe('project-current');
         expect(result.data.tasks.find((task) => task.id === 'task-imported')?.bucketId).toBe('bucket-imported');
         expect(current.buckets).toHaveLength(1);
+    });
+
+    it('preserves copied bucket templateDefinitionId only when it exists locally', () => {
+        const current = createCurrentV2();
+        const incoming: PlannerDataV2 = {
+            ...createCurrentV2(),
+            projects: [
+                {
+                    id: 'incoming-project',
+                    name: 'Incoming',
+                    description: '',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            buckets: [
+                {
+                    id: 'incoming-known',
+                    projectId: 'incoming-project',
+                    name: 'Known Link',
+                    description: '',
+                    templateDefinitionId: 'definition-current',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+                {
+                    id: 'incoming-missing',
+                    projectId: 'incoming-project',
+                    name: 'Missing Link',
+                    description: '',
+                    templateDefinitionId: 'definition-incoming-only',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            tasks: [],
+            templates: [
+                ...current.templates,
+                {
+                    id: 'template-incoming-only',
+                    name: 'Incoming Only',
+                    description: '',
+                    active: true,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+            templateDefinitions: [
+                ...current.templateDefinitions,
+                {
+                    id: 'definition-incoming-only',
+                    templateId: 'template-incoming-only',
+                    name: 'Incoming Only',
+                    description: '',
+                    priority: 0,
+                    defaultActive: true,
+                    position: 0,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+        };
+
+        const result = mergeUploadedPlannerDataV2(current, incoming, {
+            targetProjectId: 'project-current',
+            createUniqueId: (() => {
+                const ids = ['bucket-known-copy', 'bucket-missing-copy'];
+                return () => ids.shift() ?? 'fallback-id';
+            })(),
+        });
+
+        expect(result.data.buckets.find((bucket) => bucket.id === 'bucket-known-copy')?.templateDefinitionId).toBe('definition-current');
+        expect(result.data.buckets.find((bucket) => bucket.id === 'bucket-missing-copy')?.templateDefinitionId).toBeNull();
+        expect(result.data.templates).toEqual(current.templates);
+        expect(result.data.templateDefinitions).toEqual(current.templateDefinitions);
     });
 });
