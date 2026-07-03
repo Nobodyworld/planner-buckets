@@ -71,16 +71,14 @@ export function TemplateLibrary({
   }, [selectedTemplate?.id, selectedTemplate?.name, selectedTemplate?.description]);
 
   useEffect(() => {
-    setDefinitionDrafts((current) => {
-      const next: Record<string, { name: string; description: string }> = {};
-      for (const definition of selectedDefinitions) {
-        next[definition.id] = current[definition.id] ?? {
-          name: definition.name,
-          description: definition.description,
-        };
-      }
-      return next;
-    });
+    const next: Record<string, { name: string; description: string }> = {};
+    for (const definition of selectedDefinitions) {
+      next[definition.id] = {
+        name: definition.name,
+        description: definition.description,
+      };
+    }
+    setDefinitionDrafts(next);
   }, [selectedDefinitions]);
 
   const submitCreateTemplate = () => {
@@ -247,6 +245,7 @@ export function TemplateLibrary({
                     placeholder="Definition name"
                     maxLength={80}
                     aria-label={`${definition.name} definition name`}
+                    data-testid={`template-definition-name-${definition.id}`}
                   />
                   <textarea
                     value={draft.description}
@@ -255,6 +254,7 @@ export function TemplateLibrary({
                     placeholder="Definition description"
                     rows={2}
                     aria-label={`${definition.name} definition description`}
+                    data-testid={`template-definition-description-${definition.id}`}
                   />
                 </div>
               );
