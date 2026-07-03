@@ -5,6 +5,7 @@ import App from './App';
 import type { PlannerData } from './types';
 import type { PlannerDataV2 } from './types/v2';
 import { PLANNER_DATA_V2_VERSION } from './types/v2';
+import { isValidPlannerDataV2 } from './types/validators';
 
 const V1_STORAGE_KEY = 'planner-buckets:data:v1';
 const V2_STORAGE_KEY = 'planner-buckets:data:v2';
@@ -183,6 +184,204 @@ const plannerV2PartialTemplateFixture: PlannerDataV2 = {
             updatedAt: '2026-01-04T00:00:00.000Z',
         },
     ],
+};
+
+const plannerV2ScopedExportFixture: PlannerDataV2 = {
+    version: PLANNER_DATA_V2_VERSION,
+    projects: [
+        {
+            id: 'project-a',
+            name: 'Alpha',
+            description: 'Alpha board',
+            priority: 0,
+            pinned: false,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+            id: 'project-b',
+            name: 'Beta',
+            description: 'Beta board',
+            priority: 0,
+            pinned: true,
+            createdAt: '2026-01-02T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+        {
+            id: 'project-c',
+            name: 'Gamma',
+            description: 'Gamma board',
+            priority: 0,
+            pinned: false,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+    ],
+    buckets: [
+        {
+            id: 'bucket-alpha-backlog',
+            projectId: 'project-a',
+            name: 'Alpha Backlog',
+            description: '',
+            templateDefinitionId: null,
+            priority: 0,
+            pinned: false,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+            id: 'bucket-beta-ready-linked',
+            projectId: 'project-b',
+            name: 'Beta Ready Lane',
+            description: 'Derived from template',
+            templateDefinitionId: 'definition-launch-ready',
+            priority: 0,
+            pinned: false,
+            createdAt: '2026-01-02T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+        {
+            id: 'bucket-beta-manual',
+            projectId: 'project-b',
+            name: 'Beta Manual',
+            description: '',
+            templateDefinitionId: null,
+            priority: 0,
+            pinned: false,
+            createdAt: '2026-01-02T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+        {
+            id: 'bucket-gamma-support',
+            projectId: 'project-c',
+            name: 'Gamma Support',
+            description: '',
+            templateDefinitionId: 'definition-support-triage',
+            priority: 0,
+            pinned: false,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+    ],
+    tasks: [
+        {
+            id: 'task-beta-ready-1',
+            projectId: 'project-b',
+            title: 'Validate release checklist',
+            description: '',
+            bucketId: 'bucket-beta-ready-linked',
+            priority: 0,
+            resourceTags: [],
+            pinned: false,
+            completed: false,
+            archivedAt: null,
+            createdAt: '2026-01-02T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+        {
+            id: 'task-beta-ready-2',
+            projectId: 'project-b',
+            title: 'Prepare rollout owner',
+            description: '',
+            bucketId: 'bucket-beta-ready-linked',
+            priority: 0,
+            resourceTags: [],
+            pinned: false,
+            completed: false,
+            archivedAt: null,
+            createdAt: '2026-01-02T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+        {
+            id: 'task-beta-manual',
+            projectId: 'project-b',
+            title: 'Manual bucket task',
+            description: '',
+            bucketId: 'bucket-beta-manual',
+            priority: 0,
+            resourceTags: [],
+            pinned: false,
+            completed: false,
+            archivedAt: null,
+            createdAt: '2026-01-02T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+        {
+            id: 'task-gamma-support',
+            projectId: 'project-c',
+            title: 'Gamma support task',
+            description: '',
+            bucketId: 'bucket-gamma-support',
+            priority: 0,
+            resourceTags: [],
+            pinned: false,
+            completed: false,
+            archivedAt: null,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+    ],
+    templates: [
+        {
+            id: 'template-launch',
+            name: 'Launch Template',
+            description: '',
+            active: true,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+        {
+            id: 'template-support',
+            name: 'Support Template',
+            description: '',
+            active: true,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+    ],
+    templateDefinitions: [
+        {
+            id: 'definition-launch-ready',
+            templateId: 'template-launch',
+            name: 'Launch Ready',
+            description: 'Ready for launch',
+            priority: 0,
+            defaultActive: true,
+            position: 0,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+        {
+            id: 'definition-launch-done',
+            templateId: 'template-launch',
+            name: 'Launch Done',
+            description: 'Completed launch work',
+            priority: 0,
+            defaultActive: true,
+            position: 1,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+        {
+            id: 'definition-support-triage',
+            templateId: 'template-support',
+            name: 'Support Triage',
+            description: 'Support queue',
+            priority: 0,
+            defaultActive: true,
+            position: 0,
+            createdAt: '2026-01-03T00:00:00.000Z',
+            updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+    ],
+};
+
+const plannerV2ZeroEligibleTemplateFixture: PlannerDataV2 = {
+    ...plannerV2TemplateFixture,
+    templateDefinitions: plannerV2TemplateFixture.templateDefinitions.map((definition) => ({
+        ...definition,
+        defaultActive: false,
+    })),
 };
 
 const seedPlannerData = (data: PlannerData = plannerFixture) => {
@@ -657,6 +856,63 @@ describe('App integration', () => {
         });
     });
 
+    it('rejects malformed v2 restore and upload payloads with duplicate linked buckets', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2ScopedExportFixture);
+
+        render(<App />);
+
+        const malformed: PlannerDataV2 = {
+            ...plannerV2ScopedExportFixture,
+            projects: [plannerV2ScopedExportFixture.projects.find((project) => project.id === 'project-b')!],
+            buckets: [
+                {
+                    id: 'malformed-bucket-1',
+                    projectId: 'project-b',
+                    name: 'Malformed A',
+                    description: '',
+                    templateDefinitionId: 'definition-launch-ready',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: '2026-01-02T00:00:00.000Z',
+                    updatedAt: '2026-01-02T00:00:00.000Z',
+                },
+                {
+                    id: 'malformed-bucket-2',
+                    projectId: 'project-b',
+                    name: 'Malformed B',
+                    description: '',
+                    templateDefinitionId: 'definition-launch-ready',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: '2026-01-02T00:00:00.000Z',
+                    updatedAt: '2026-01-02T00:00:00.000Z',
+                },
+            ],
+            tasks: [],
+        };
+
+        const malformedFile = new File([JSON.stringify(malformed)], 'malformed-v2.json', { type: 'application/json' });
+
+        fireEvent.change(screen.getByLabelText('Restore planner data from JSON'), {
+            target: { files: [malformedFile] },
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/not a valid/i)).toBeInTheDocument();
+        });
+        expect(screen.queryByRole('button', { name: 'Confirm restore' })).not.toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Upload planner data from JSON'), {
+            target: { files: [malformedFile] },
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/not a valid/i)).toBeInTheDocument();
+        });
+        expect(screen.queryByRole('button', { name: 'Confirm upload' })).not.toBeInTheDocument();
+    });
+
     it('applies a template to the active project and supports undo and redo', async () => {
         localStorage.clear();
         seedPlannerDataV2(plannerV2TemplateFixture);
@@ -722,6 +978,179 @@ describe('App integration', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Active' }));
         fireEvent.click(screen.getByRole('button', { name: 'Apply to Beta' }));
         expect(screen.getByText('Inactive templates cannot be applied.')).toBeInTheDocument();
+    });
+
+    it('shows zero-eligible template message and does not create history entries', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2ZeroEligibleTemplateFixture);
+
+        render(<App />);
+
+        const beforeApplySnapshot = localStorage.getItem(V2_STORAGE_KEY);
+        const undoButton = screen.getByRole('button', { name: 'Undo' });
+        expect(undoButton).toBeDisabled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Apply to Beta' }));
+
+        expect(screen.getByText('No buckets were created because this template has no default-active definitions.')).toBeInTheDocument();
+        expect(localStorage.getItem(V2_STORAGE_KEY)).toBe(beforeApplySnapshot);
+        expect(readRuntimePlannerData().buckets.some((bucket) => (
+            bucket.projectId === 'project-b' && bucket.templateDefinitionId !== null
+        ))).toBe(false);
+        expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    });
+
+    it('exports scoped template-derived bucket and restores it through UI as valid v2 data', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2ScopedExportFixture);
+        let exportedBlob: Blob | null = null;
+
+        Object.defineProperty(URL, 'createObjectURL', {
+            value: vi.fn((blob: Blob) => {
+                exportedBlob = blob;
+                return 'blob:planner-scoped-export';
+            }),
+            configurable: true,
+        });
+        Object.defineProperty(URL, 'revokeObjectURL', {
+            value: vi.fn(),
+            configurable: true,
+        });
+        vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+        render(<App />);
+
+        fireEvent.change(screen.getByLabelText('Active project'), {
+            target: { value: 'project-b' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Choose export scope' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bucket: Beta Ready Lane' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
+
+        expect(exportedBlob).not.toBeNull();
+        const exported = JSON.parse(await exportedBlob!.text()) as PlannerDataV2;
+
+        expect(exported.projects.map((project) => project.id)).toEqual(['project-b']);
+        expect(exported.buckets.map((bucket) => bucket.id)).toEqual(['bucket-beta-ready-linked']);
+        expect(exported.tasks.map((task) => task.id).sort()).toEqual(['task-beta-ready-1', 'task-beta-ready-2']);
+        expect(exported.templateDefinitions.map((definition) => definition.id)).toEqual(['definition-launch-ready']);
+        expect(exported.templates.map((template) => template.id)).toEqual(['template-launch']);
+
+        expect(exported.projects.some((project) => project.id === 'project-a')).toBe(false);
+        expect(exported.projects.some((project) => project.id === 'project-c')).toBe(false);
+        expect(exported.buckets.some((bucket) => bucket.id === 'bucket-beta-manual')).toBe(false);
+        expect(exported.tasks.some((task) => task.id === 'task-beta-manual')).toBe(false);
+        expect(exported.templates.some((template) => template.id === 'template-support')).toBe(false);
+        expect(exported.templateDefinitions.some((definition) => definition.id === 'definition-support-triage')).toBe(false);
+
+        expect(isValidPlannerDataV2(exported)).toBe(true);
+
+        const restoreFile = new File([JSON.stringify(exported)], 'scoped-export.json', { type: 'application/json' });
+        fireEvent.change(screen.getByLabelText('Restore planner data from JSON'), {
+            target: { files: [restoreFile] },
+        });
+        await waitFor(() => {
+            expect(screen.getByText('Restore 2 task(s) and 1 bucket(s) and replace current planner?')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm restore' }));
+
+        await waitFor(() => {
+            const restored = readRuntimePlannerData();
+            expect(isValidPlannerDataV2(restored)).toBe(true);
+            expect(restored.projects.map((project) => project.id)).toEqual(['project-b']);
+            expect(restored.buckets.map((bucket) => bucket.id)).toEqual(['bucket-beta-ready-linked']);
+            expect(restored.tasks.map((task) => task.id).sort()).toEqual(['task-beta-ready-1', 'task-beta-ready-2']);
+            expect(restored.templateDefinitions.map((definition) => definition.id)).toEqual(['definition-launch-ready']);
+            expect(restored.templates.map((template) => template.id)).toEqual(['template-launch']);
+        });
+    });
+
+    it('syncs definition rename through persistence and undo/redo', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2TemplateFixture);
+
+        render(<App />);
+
+        const definitionInput = screen.getByTestId('template-definition-name-definition-ready');
+        fireEvent.change(definitionInput, { target: { value: 'Ready Renamed' } });
+        fireEvent.blur(definitionInput);
+
+        await waitFor(() => {
+            const saved = readRuntimePlannerData();
+            expect(saved.templateDefinitions.find((definition) => definition.id === 'definition-ready')?.name).toBe('Ready Renamed');
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+        await waitFor(() => {
+            expect((screen.getByTestId('template-definition-name-definition-ready') as HTMLInputElement).value).toBe('Ready');
+            const saved = readRuntimePlannerData();
+            expect(saved.templateDefinitions.find((definition) => definition.id === 'definition-ready')?.name).toBe('Ready');
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+
+        await waitFor(() => {
+            expect((screen.getByTestId('template-definition-name-definition-ready') as HTMLInputElement).value).toBe('Ready Renamed');
+            const saved = readRuntimePlannerData();
+            expect(saved.templateDefinitions.find((definition) => definition.id === 'definition-ready')?.name).toBe('Ready Renamed');
+        });
+    });
+
+    it('does not retain stale definition drafts when switching templates', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2ScopedExportFixture);
+
+        render(<App />);
+
+        const templateSelect = screen.getByLabelText('Selected template');
+        fireEvent.change(templateSelect, { target: { value: 'template-launch' } });
+
+        const launchInput = screen.getByTestId('template-definition-name-definition-launch-ready');
+        fireEvent.change(launchInput, { target: { value: 'Transient Launch Name' } });
+
+        fireEvent.change(templateSelect, { target: { value: 'template-support' } });
+        expect((screen.getByTestId('template-definition-name-definition-support-triage') as HTMLInputElement).value).toBe('Support Triage');
+
+        fireEvent.change(templateSelect, { target: { value: 'template-launch' } });
+        expect((screen.getByTestId('template-definition-name-definition-launch-ready') as HTMLInputElement).value).toBe('Launch Ready');
+
+        const saved = readRuntimePlannerData();
+        expect(saved.templateDefinitions.find((definition) => definition.id === 'definition-launch-ready')?.name).toBe('Launch Ready');
+    });
+
+    it('replaces template drafts with restored data while template library is open', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(plannerV2ScopedExportFixture);
+
+        render(<App />);
+
+        const draftInput = screen.getByTestId('template-definition-name-definition-launch-ready');
+        fireEvent.change(draftInput, { target: { value: 'Unsaved Draft Name' } });
+
+        const restorePayload: PlannerDataV2 = {
+            ...plannerV2ScopedExportFixture,
+            templateDefinitions: plannerV2ScopedExportFixture.templateDefinitions.map((definition) => (
+                definition.id === 'definition-launch-ready'
+                    ? { ...definition, name: 'Restored Launch Ready' }
+                    : definition
+            )),
+        };
+        const restoreFile = new File([JSON.stringify(restorePayload)], 'template-restore.json', { type: 'application/json' });
+
+        fireEvent.change(screen.getByLabelText('Restore planner data from JSON'), {
+            target: { files: [restoreFile] },
+        });
+        await waitFor(() => {
+            expect(screen.getByText('Restore 4 task(s) and 4 bucket(s) and replace current planner?')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm restore' }));
+
+        await waitFor(() => {
+            expect((screen.getByTestId('template-definition-name-definition-launch-ready') as HTMLInputElement).value).toBe('Restored Launch Ready');
+            const saved = readRuntimePlannerData();
+            expect(saved.templateDefinitions.find((definition) => definition.id === 'definition-launch-ready')?.name).toBe('Restored Launch Ready');
+        });
     });
 
     it('creates and edits templates and definitions from the Template Library', async () => {

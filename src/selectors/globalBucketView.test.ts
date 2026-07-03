@@ -284,4 +284,21 @@ describe('getGlobalBucketView', () => {
     expect(result).toBeDefined();
     expect(result.length).toBeGreaterThan(0);
   });
+
+  it('rejects duplicate linked buckets for one project and definition', () => {
+    const data = createData();
+    data.buckets.push({
+      id: 'bucket-alpha-ready-duplicate',
+      projectId: 'project-a',
+      name: 'Ready Duplicate',
+      description: '',
+      templateDefinitionId: 'definition-ready',
+      priority: 0,
+      pinned: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    expect(() => getGlobalBucketView(data)).toThrow('duplicate linked buckets');
+  });
 });

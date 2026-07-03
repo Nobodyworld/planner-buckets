@@ -1226,6 +1226,218 @@ describe('Phase 2: v2 Schema and Migration', () => {
         });
     });
 
+    describe('Project template-definition linkage uniqueness', () => {
+        it('rejects duplicate linked buckets in one project', () => {
+            const v2: PlannerDataV2 = {
+                version: PLANNER_DATA_V2_VERSION,
+                projects: [
+                    {
+                        id: 'project-a',
+                        name: 'Project A',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                buckets: [
+                    {
+                        id: 'bucket-a-1',
+                        projectId: 'project-a',
+                        name: 'Ready A',
+                        description: '',
+                        templateDefinitionId: 'definition-ready',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                    {
+                        id: 'bucket-a-2',
+                        projectId: 'project-a',
+                        name: 'Ready B',
+                        description: '',
+                        templateDefinitionId: 'definition-ready',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                tasks: [],
+                templates: [
+                    {
+                        id: 'template-launch',
+                        name: 'Launch',
+                        description: '',
+                        active: true,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templateDefinitions: [
+                    {
+                        id: 'definition-ready',
+                        templateId: 'template-launch',
+                        name: 'Ready',
+                        description: '',
+                        priority: 0,
+                        defaultActive: true,
+                        position: 0,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+            };
+
+            expect(() => validatePlannerDataV2Integrity(v2)).toThrow('duplicate linked buckets');
+        });
+
+        it('rejects duplicate linked buckets in one project even with different names', () => {
+            const v2: PlannerDataV2 = {
+                version: PLANNER_DATA_V2_VERSION,
+                projects: [
+                    {
+                        id: 'project-a',
+                        name: 'Project A',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                buckets: [
+                    {
+                        id: 'bucket-a-1',
+                        projectId: 'project-a',
+                        name: 'Ready Lane',
+                        description: '',
+                        templateDefinitionId: 'definition-ready',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                    {
+                        id: 'bucket-a-2',
+                        projectId: 'project-a',
+                        name: 'Completely Different Name',
+                        description: '',
+                        templateDefinitionId: 'definition-ready',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                tasks: [],
+                templates: [
+                    {
+                        id: 'template-launch',
+                        name: 'Launch',
+                        description: '',
+                        active: true,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templateDefinitions: [
+                    {
+                        id: 'definition-ready',
+                        templateId: 'template-launch',
+                        name: 'Ready',
+                        description: '',
+                        priority: 0,
+                        defaultActive: true,
+                        position: 0,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+            };
+
+            expect(() => validatePlannerDataV2Integrity(v2)).toThrow('duplicate linked buckets');
+        });
+
+        it('accepts the same definition used once in multiple projects', () => {
+            const v2: PlannerDataV2 = {
+                version: PLANNER_DATA_V2_VERSION,
+                projects: [
+                    {
+                        id: 'project-a',
+                        name: 'Project A',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                    {
+                        id: 'project-b',
+                        name: 'Project B',
+                        description: '',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                buckets: [
+                    {
+                        id: 'bucket-a-1',
+                        projectId: 'project-a',
+                        name: 'Ready A',
+                        description: '',
+                        templateDefinitionId: 'definition-ready',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                    {
+                        id: 'bucket-b-1',
+                        projectId: 'project-b',
+                        name: 'Ready B',
+                        description: '',
+                        templateDefinitionId: 'definition-ready',
+                        priority: 0,
+                        pinned: false,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                tasks: [],
+                templates: [
+                    {
+                        id: 'template-launch',
+                        name: 'Launch',
+                        description: '',
+                        active: true,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+                templateDefinitions: [
+                    {
+                        id: 'definition-ready',
+                        templateId: 'template-launch',
+                        name: 'Ready',
+                        description: '',
+                        priority: 0,
+                        defaultActive: true,
+                        position: 0,
+                        createdAt: '2026-01-01T00:00:00Z',
+                        updatedAt: '2026-01-01T00:00:00Z',
+                    },
+                ],
+            };
+
+            expect(() => validatePlannerDataV2Integrity(v2)).not.toThrow();
+        });
+    });
+
     // =========================================================================
     // 25. Project ID collision handling
     // =========================================================================

@@ -102,6 +102,38 @@ describe('plannerImport v2 compatibility', () => {
         );
     });
 
+    it('rejects malformed v2 imports with duplicate linked buckets in one project', () => {
+        const malformed: PlannerDataV2 = {
+            ...createCurrentV2(),
+            buckets: [
+                {
+                    id: 'bucket-linked-1',
+                    projectId: 'project-current',
+                    name: 'Ready Lane A',
+                    description: '',
+                    templateDefinitionId: 'definition-current',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+                {
+                    id: 'bucket-linked-2',
+                    projectId: 'project-current',
+                    name: 'Ready Lane B',
+                    description: '',
+                    templateDefinitionId: 'definition-current',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
+        };
+
+        expect(() => coercePlannerDataToV2(malformed)).toThrow('Selected file is not a valid planner export.');
+    });
+
     it('merges migrated v1 data into the target v2 project', () => {
         const current = createCurrentV2();
         const incoming = coercePlannerDataToV2(createV1Upload()).data;
@@ -344,7 +376,7 @@ describe('plannerImport v2 compatibility', () => {
         expect(uploadedTask?.bucketId).toBe('bucket-existing');
     });
 
-    it('prevents duplicate linked buckets in one project', () => {
+    it('prevents duplicate linked buckets in target project during merge', () => {
         const current = createCurrentV2();
         const existingBucket: BucketV2 = {
             id: 'bucket-existing',
@@ -363,11 +395,31 @@ describe('plannerImport v2 compatibility', () => {
         };
 
         const incoming: PlannerDataV2 = {
-            ...current,
+            ...createCurrentV2(),
+            projects: [
+                {
+                    id: 'incoming-project-1',
+                    name: 'Incoming 1',
+                    description: '',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+                {
+                    id: 'incoming-project-2',
+                    name: 'Incoming 2',
+                    description: '',
+                    priority: 0,
+                    pinned: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                },
+            ],
             buckets: [
                 {
                     id: 'bucket-incoming-1',
-                    projectId: 'project-current',
+                    projectId: 'incoming-project-1',
                     name: 'Ready v1',
                     description: '',
                     templateDefinitionId: 'definition-current',
@@ -378,7 +430,7 @@ describe('plannerImport v2 compatibility', () => {
                 },
                 {
                     id: 'bucket-incoming-2',
-                    projectId: 'project-current',
+                    projectId: 'incoming-project-2',
                     name: 'Ready v2',
                     description: '',
                     templateDefinitionId: 'definition-current',

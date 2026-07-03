@@ -412,6 +412,25 @@ export const validateBucketsReferenceTemplateDefinitions = (data: PlannerDataV2)
 };
 
 /**
+ * Validate that each project contains at most one bucket per non-null template definition.
+ * The same definition may appear once in each different project.
+ */
+export const validateProjectTemplateDefinitionBucketUniqueness = (data: PlannerDataV2): void => {
+    const seenByProject = new Set<string>();
+
+    for (const bucket of data.buckets) {
+        if (bucket.templateDefinitionId === null) continue;
+        const key = `${bucket.projectId}::${bucket.templateDefinitionId}`;
+        if (seenByProject.has(key)) {
+            throw new Error(
+                `Project ${bucket.projectId} has duplicate linked buckets for template definition ${bucket.templateDefinitionId}`,
+            );
+        }
+        seenByProject.add(key);
+    }
+};
+
+/**
  * Validate no invalid booleans in active/defaultActive fields.
  */
 export const validateBooleanFields = (data: PlannerDataV2): void => {
@@ -440,5 +459,6 @@ export const validatePlannerDataV2Integrity = (data: PlannerDataV2): void => {
     validateTasksReferenceBucketsInSameProject(data);
     validateTemplateDefinitionsReferenceTemplates(data);
     validateBucketsReferenceTemplateDefinitions(data);
+    validateProjectTemplateDefinitionBucketUniqueness(data);
     validateBooleanFields(data);
 };

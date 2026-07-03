@@ -245,6 +245,7 @@ export function TemplateLibrary({
                     placeholder="Definition name"
                     maxLength={80}
                     aria-label={`${definition.name} definition name`}
+                    data-testid={`template-definition-name-${definition.id}`}
                   />
                   <textarea
                     value={draft.description}
@@ -253,6 +254,7 @@ export function TemplateLibrary({
                     placeholder="Definition description"
                     rows={2}
                     aria-label={`${definition.name} definition description`}
+                    data-testid={`template-definition-description-${definition.id}`}
                   />
                 </div>
               );
