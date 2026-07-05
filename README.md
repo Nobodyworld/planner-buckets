@@ -126,7 +126,7 @@ v2 notes:
 ## Repository map
 
 - `src/App.tsx`: primary composition, controls, and UI wiring
-- `src/state/plannerReducer.ts`: deterministic state transitions
+- `src/state/plannerReducerV2.ts`: deterministic state transitions
 - `src/services/plannerPersistence.ts`: v1/v2 loading, migration, and persistence
 - `src/types/v2.ts`: v2 schema contracts
 - `src/types/validators.ts`: structural and relational validation rules
