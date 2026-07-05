@@ -483,6 +483,7 @@ describe('App integration', () => {
 
         render(<App />);
 
+
         fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
 
         await waitFor(() => {

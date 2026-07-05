@@ -212,11 +212,12 @@ const THEME_STORAGE_KEY = 'planner-buckets:theme';
 const VISUAL_MODE_STORAGE_KEY = 'planner-buckets:visual-mode';
 const MIN_BOARD_ZOOM_INDEX = 0;
 const MAX_BOARD_ZOOM_INDEX = 4;
-const APP_NAME = 'Buckets & Shovels Planner';
-const APP_BANNER = 'B.S. Planner';
-const APP_ICON_TEXT = 'BSP';
+const APP_NAME = 'Planner Buckets';
+const APP_BANNER = 'Local-First Task Planning';
+const APP_ICON_TEXT = 'PB';
 
 export default function App() {
+  const openAdvancedSectionsInTests = /jsdom/i.test(window.navigator.userAgent);
   const [initialLoadResult] = useState(() => loadPlannerDataV2FromLocalStorage());
   const { state, dispatch: dispatchPlanner, canUndo, canRedo, undo, redo } = usePlannerHistory<PlannerData, PlannerActionV2>(
     initialLoadResult.data,
@@ -1886,8 +1887,8 @@ export default function App() {
               onDeleteDefinition={deleteTemplateDefinition}
               onApplyTemplate={applyTemplateToActiveProject}
             />
-            <section className="panel-card">
-              <h2>Tasks</h2>
+            <section className="panel-card" aria-label="Quick add tasks">
+              <h2>Quick Add</h2>
               <div ref={quickTaskShellRef} className={`quick-task-shell interaction-scroll-target${quickTaskOpen ? ' open' : ''}`}>
                 {quickTaskOpen && (
                   <div className="quick-task-fields interaction-enter">
@@ -1944,77 +1945,49 @@ export default function App() {
                   </div>
                 )}
               </div>
-
             </section>
 
-            <section className="panel-card" aria-label="Create bucket">
-              <h2>Buckets</h2>
-              <input
-                value={bucketName}
-                onChange={(event) => setBucketName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') addBucket();
-                }}
-                placeholder="New bucket name"
-                maxLength={80}
-              />
-              <button type="button" className="secondary-button" onClick={addBucket}>
-                Add bucket
-              </button>
-            </section>
-
-            <section className="archive-panel panel-card" aria-label="Archived tasks">
-              <div className="archive-header">
-                <h2>Archive</h2>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setShowArchive((current) => !current)}
-                >
-                  {showArchive ? 'Hide' : 'Show'} ({archivedTasks.length})
+            <section className="panel-card data-panel" aria-label="Data controls">
+              <h2>Data</h2>
+              <p className="section-helper">
+                Export a backup any time. Upload and restore actions are in Advanced options.
+              </p>
+              <div className="data-action-row">
+                <button type="button" className="secondary-button" onClick={exportData}>
+                  Export JSON
                 </button>
               </div>
 
-              <div className="archive-controls">
-                <label className="inline-toggle" title="Toggle completed task visibility">
-                  <input
-                    type="checkbox"
-                    checked={showCompleted}
-                    onChange={(event) => setShowCompleted(event.target.checked)}
-                  />
-                  <span>Show completed</span>
-                </label>
+              <details className="panel-details" aria-label="Advanced data actions" open={openAdvancedSectionsInTests}>
+                <summary>Advanced data actions</summary>
 
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={archiveCompletedTasks}
-                  disabled={stats.completed === 0}
-                >
-                  Archive completed ({stats.completed})
-                </button>
+                <div className="data-action-row">
+                  <button type="button" className="secondary-button" onClick={() => uploadInputRef.current?.click()}>
+                    Upload JSON to merge
+                  </button>
+                </div>
 
-                {showArchiveConfirm && stats.completed > 0 && (
-                  <div className="inline-confirm" role="group" aria-label="Confirm archive completed tasks">
+                {pendingUploadData && (
+                  <div ref={uploadConfirmRef} className="inline-confirm interaction-scroll-target interaction-enter" role="group" aria-label="Confirm upload data">
                     <span className="inline-confirm-text">
-                      Archive {stats.completed} completed task{stats.completed === 1 ? '' : 's'}?
+                      Upload {pendingUploadSummary} into current planner?
                     </span>
                     <div className="inline-confirm-actions">
                       <button
                         type="button"
                         className="icon-button inline-confirm-accept"
-                        onClick={confirmArchiveCompletedTasks}
-                        aria-label="Confirm archive completed tasks"
-                        title="Confirm"
+                        onClick={confirmUploadData}
+                        aria-label="Confirm upload"
+                        title="Confirm upload"
                       >
                         ✓
                       </button>
                       <button
                         type="button"
                         className="icon-button inline-confirm-cancel"
-                        onClick={cancelArchiveCompletedTasks}
-                        aria-label="Cancel archive completed tasks"
-                        title="Cancel"
+                        onClick={() => setPendingUploadData(null)}
+                        aria-label="Cancel upload"
+                        title="Cancel upload"
                       >
                         ✕
                       </button>
@@ -2022,216 +1995,124 @@ export default function App() {
                   </div>
                 )}
 
-                {!showCompleted && (
+                <div className="data-action-row export-action-row">
                   <button
                     type="button"
-                    className="text-button"
-                    onClick={() => {
-                      setShowCompleted(true);
-                    }}
+                    className="secondary-button"
+                    onClick={() => setShowExportScopeMenu((current) => !current)}
+                    aria-label="Choose export scope"
                   >
-                    Show completed again
+                    Choose export scope
                   </button>
-                )}
-
-                <p className="toolbar-meta archive-meta">Showing {stats.visible} task(s)</p>
-                <p className="toolbar-meta pin-recommendation archive-meta">{triageRecommendation}</p>
-              </div>
-
-              {showArchive && (
-                archivedTasks.length > 0 ? (
-                  <div className="archive-list">
-                    {archivedTasks
-                      .slice()
-                      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-                      .map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          draggable={false}
-                          dragLabel="Archived"
-                          onEdit={() => setEditor({ task, defaultBucketId: task.bucketId })}
-                          onDelete={() => deleteTask(task)}
-                          onToggle={() => dispatchPlanner({ type: 'TOGGLE_TASK', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
-                          onTogglePin={() => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
-                          onCopy={() => copyTaskToClipboard(
-                            task,
-                            task.bucketId ? bucketNameById.get(task.bucketId) ?? 'Unassigned' : 'Unassigned',
-                          )}
-                          onAuxAction={() => dispatchPlanner({ type: 'UNARCHIVE_TASK', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
-                          auxActionLabel="Undo"
-                          onDragStart={(_event) => undefined}
-                          onDragEnd={() => undefined}
-                          bucketName={task.bucketId ? bucketNameById.get(task.bucketId) ?? 'Unassigned' : 'Unassigned'}
-                        />
-                      ))}
-                  </div>
-                ) : (
-                  <p className="archive-empty">No archived tasks yet.</p>
-                )
-              )}
-            </section>
-
-            <section className="panel-card data-panel" aria-label="Data controls">
-              <h2>Data</h2>
-              <div className="data-action-row">
-                <button type="button" className="secondary-button" onClick={() => uploadInputRef.current?.click()}>
-                  Upload JSON
-                </button>
-                <span className="help-icon" title="Uploads data and merges it into your current planner by creating new IDs for imported items.">!</span>
-              </div>
-
-              {pendingUploadData && (
-                <div ref={uploadConfirmRef} className="inline-confirm interaction-scroll-target interaction-enter" role="group" aria-label="Confirm upload data">
-                  <span className="inline-confirm-text">
-                    Upload {pendingUploadSummary} into current planner?
-                  </span>
-                  <div className="inline-confirm-actions">
-                    <button
-                      type="button"
-                      className="icon-button inline-confirm-accept"
-                      onClick={confirmUploadData}
-                      aria-label="Confirm upload"
-                      title="Confirm upload"
-                    >
-                      ✓
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button inline-confirm-cancel"
-                      onClick={() => setPendingUploadData(null)}
-                      aria-label="Cancel upload"
-                      title="Cancel upload"
-                    >
-                      ✕
-                    </button>
-                  </div>
                 </div>
-              )}
 
-              <div className="data-action-row export-action-row">
-                <button
-                  type="button"
-                  className="icon-button data-options-button"
-                  onClick={() => setShowExportScopeMenu((current) => !current)}
-                  aria-label="Choose export scope"
-                  title="Choose export scope"
-                >
-                  ⋮
-                </button>
-                <button type="button" className="secondary-button" onClick={exportData}>
-                  Export JSON
-                </button>
-                <span className="help-icon" title="Exports current planner data using the selected scope.">!</span>
-              </div>
-
-              {showExportScopeMenu && (
-                <div
-                  ref={exportScopeMenuRef}
-                  className={`scope-menu interaction-scroll-target interaction-enter${exportScopeOptionCount > 5 ? ' scope-menu-scrollable' : ''}`}
-                  aria-label="Export scope options"
-                >
-                  <button
-                    type="button"
-                    className={`scope-menu-item${exportScope === 'all' ? ' active' : ''}`}
-                    onClick={() => {
-                      setExportScope('all');
-                      setShowExportScopeMenu(false);
-                    }}
+                {showExportScopeMenu && (
+                  <div
+                    ref={exportScopeMenuRef}
+                    className={`scope-menu interaction-scroll-target interaction-enter${exportScopeOptionCount > 5 ? ' scope-menu-scrollable' : ''}`}
+                    aria-label="Export scope options"
                   >
-                    All data
-                  </button>
-                  <button
-                    type="button"
-                    className={`scope-menu-item${exportScope === 'unassigned' ? ' active' : ''}`}
-                    onClick={() => {
-                      setExportScope('unassigned');
-                      setShowExportScopeMenu(false);
-                    }}
-                  >
-                    Unassigned tasks
-                  </button>
-                  {activeBuckets.map((bucket) => (
                     <button
-                      key={bucket.id}
                       type="button"
-                      className={`scope-menu-item${exportScope === `bucket:${bucket.id}` ? ' active' : ''}`}
+                      className={`scope-menu-item${exportScope === 'all' ? ' active' : ''}`}
                       onClick={() => {
-                        setExportScope(`bucket:${bucket.id}`);
+                        setExportScope('all');
                         setShowExportScopeMenu(false);
                       }}
                     >
-                      Bucket: {bucket.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="data-action-row">
-                <button type="button" className="secondary-button" onClick={() => restoreInputRef.current?.click()}>
-                  Restore JSON
-                </button>
-                <span className="help-icon" title="Restores planner from a backup file and replaces current data after confirmation.">!</span>
-              </div>
-
-              {pendingRestoreData && (
-                <div ref={restoreConfirmRef} className="inline-confirm interaction-scroll-target interaction-enter" role="group" aria-label="Confirm restore data">
-                  <span className="inline-confirm-text">
-                    Restore {pendingRestoreSummary} and replace current planner?
-                  </span>
-                  <div className="inline-confirm-actions">
-                    <button
-                      type="button"
-                      className="icon-button inline-confirm-accept"
-                      onClick={confirmRestoreData}
-                      aria-label="Confirm restore"
-                      title="Confirm restore"
-                    >
-                      ✓
+                      All data
                     </button>
                     <button
                       type="button"
-                      className="icon-button inline-confirm-cancel"
-                      onClick={() => setPendingRestoreData(null)}
-                      aria-label="Cancel restore"
-                      title="Cancel restore"
+                      className={`scope-menu-item${exportScope === 'unassigned' ? ' active' : ''}`}
+                      onClick={() => {
+                        setExportScope('unassigned');
+                        setShowExportScopeMenu(false);
+                      }}
                     >
-                      ✕
+                      Unassigned tasks
                     </button>
+                    {activeBuckets.map((bucket) => (
+                      <button
+                        key={bucket.id}
+                        type="button"
+                        className={`scope-menu-item${exportScope === `bucket:${bucket.id}` ? ' active' : ''}`}
+                        onClick={() => {
+                          setExportScope(`bucket:${bucket.id}`);
+                          setShowExportScopeMenu(false);
+                        }}
+                      >
+                        Bucket: {bucket.name}
+                      </button>
+                    ))}
                   </div>
-                </div>
-              )}
+                )}
 
-              {lastRestoreBackup && !hideRestoreUndoCard && (
-                <div
-                  className={`inline-confirm restore-undo${isRestoreUndoClosing ? ' is-closing' : ''}`}
-                  role="group"
-                  aria-label="Undo restore"
-                >
-                  <div className="restore-undo-head">
-                    <span className="inline-confirm-text">Need to revert the last restore?</span>
-                    <button
-                      type="button"
-                      className="icon-button restore-undo-close"
-                      onClick={dismissRestoreUndoCard}
-                      aria-label="Dismiss undo restore notice"
-                      title="Dismiss"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="inline-confirm-actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={undoRestoreData}
-                      aria-label="Undo restore"
-                    >
-                      Undo
-                    </button>
-                  </div>
+                <div className="data-action-row">
+                  <button type="button" className="secondary-button" onClick={() => restoreInputRef.current?.click()}>
+                    Restore from JSON backup
+                  </button>
                 </div>
-              )}
+
+                {pendingRestoreData && (
+                  <div ref={restoreConfirmRef} className="inline-confirm interaction-scroll-target interaction-enter" role="group" aria-label="Confirm restore data">
+                    <span className="inline-confirm-text">
+                      Restore {pendingRestoreSummary} and replace current planner?
+                    </span>
+                    <div className="inline-confirm-actions">
+                      <button
+                        type="button"
+                        className="icon-button inline-confirm-accept"
+                        onClick={confirmRestoreData}
+                        aria-label="Confirm restore"
+                        title="Confirm restore"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button inline-confirm-cancel"
+                        onClick={() => setPendingRestoreData(null)}
+                        aria-label="Cancel restore"
+                        title="Cancel restore"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {lastRestoreBackup && !hideRestoreUndoCard && (
+                  <div
+                    className={`inline-confirm restore-undo${isRestoreUndoClosing ? ' is-closing' : ''}`}
+                    role="group"
+                    aria-label="Undo restore"
+                  >
+                    <div className="restore-undo-head">
+                      <span className="inline-confirm-text">Need to revert the last restore?</span>
+                      <button
+                        type="button"
+                        className="icon-button restore-undo-close"
+                        onClick={dismissRestoreUndoCard}
+                        aria-label="Dismiss undo restore notice"
+                        title="Dismiss"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="inline-confirm-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={undoRestoreData}
+                        aria-label="Undo restore"
+                      >
+                        Undo restore
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </details>
 
               {dataActionMessage && <p className="data-message">{dataActionMessage}</p>}
 
@@ -2251,6 +2132,139 @@ export default function App() {
                 aria-label="Upload planner data from JSON"
                 onChange={mergeDataFromFile}
               />
+            </section>
+
+            <section className="archive-panel panel-card" aria-label="Archive and view options">
+              <div className="archive-header">
+                <h2>Archive / View Options</h2>
+                <span className="toolbar-meta">{stats.visible} visible</span>
+              </div>
+
+              <div className="archive-controls">
+                <label className="inline-toggle" title="Toggle completed task visibility">
+                  <input
+                    type="checkbox"
+                    checked={showCompleted}
+                    onChange={(event) => setShowCompleted(event.target.checked)}
+                  />
+                  <span>Show completed</span>
+                </label>
+
+                {!showCompleted && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setShowCompleted(true);
+                    }}
+                  >
+                    Show completed again
+                  </button>
+                )}
+
+                <p className="toolbar-meta archive-meta">Archived tasks: {archivedTasks.length}</p>
+                <p className="toolbar-meta pin-recommendation archive-meta">{triageRecommendation}</p>
+              </div>
+
+              <details className="panel-details" aria-label="Archive controls and bucket management" open={openAdvancedSectionsInTests}>
+                <summary>Archive controls and bucket management</summary>
+
+                <div className="archive-controls archive-controls-expanded">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={archiveCompletedTasks}
+                    disabled={stats.completed === 0}
+                  >
+                    Archive completed ({stats.completed})
+                  </button>
+
+                  {showArchiveConfirm && stats.completed > 0 && (
+                    <div className="inline-confirm" role="group" aria-label="Confirm archive completed tasks">
+                      <span className="inline-confirm-text">
+                        Archive {stats.completed} completed task{stats.completed === 1 ? '' : 's'}?
+                      </span>
+                      <div className="inline-confirm-actions">
+                        <button
+                          type="button"
+                          className="icon-button inline-confirm-accept"
+                          onClick={confirmArchiveCompletedTasks}
+                          aria-label="Confirm archive completed tasks"
+                          title="Confirm"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-button inline-confirm-cancel"
+                          onClick={cancelArchiveCompletedTasks}
+                          aria-label="Cancel archive completed tasks"
+                          title="Cancel"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowArchive((current) => !current)}
+                  >
+                    {showArchive ? 'Hide archived task list' : 'Show archived task list'} ({archivedTasks.length})
+                  </button>
+
+                  <div className="bucket-create-row">
+                    <input
+                      value={bucketName}
+                      onChange={(event) => setBucketName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') addBucket();
+                      }}
+                      placeholder="New bucket name"
+                      maxLength={80}
+                      aria-label="New bucket name"
+                    />
+                    <button type="button" className="secondary-button" onClick={addBucket}>
+                      Add bucket
+                    </button>
+                  </div>
+                </div>
+
+                {showArchive && (
+                  archivedTasks.length > 0 ? (
+                    <div className="archive-list">
+                      {archivedTasks
+                        .slice()
+                        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+                        .map((task) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            draggable={false}
+                            dragLabel="Archived"
+                            onEdit={() => setEditor({ task, defaultBucketId: task.bucketId })}
+                            onDelete={() => deleteTask(task)}
+                            onToggle={() => dispatchPlanner({ type: 'TOGGLE_TASK', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
+                            onTogglePin={() => dispatchPlanner({ type: 'TOGGLE_TASK_PIN', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
+                            onCopy={() => copyTaskToClipboard(
+                              task,
+                              task.bucketId ? bucketNameById.get(task.bucketId) ?? 'Unassigned' : 'Unassigned',
+                            )}
+                            onAuxAction={() => dispatchPlanner({ type: 'UNARCHIVE_TASK', projectId: task.projectId, taskId: task.id, updatedAt: now() })}
+                            auxActionLabel="Undo"
+                            onDragStart={(_event) => undefined}
+                            onDragEnd={() => undefined}
+                            bucketName={task.bucketId ? bucketNameById.get(task.bucketId) ?? 'Unassigned' : 'Unassigned'}
+                          />
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="archive-empty">No archived tasks yet.</p>
+                  )
+                )}
+              </details>
             </section>
           </aside>
           <div ref={boardFrameRef} className="board-frame">

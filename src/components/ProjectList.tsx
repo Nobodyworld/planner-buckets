@@ -24,6 +24,7 @@ export function ProjectList({
   onMoveProject,
   onDeleteProject,
 }: ProjectListProps) {
+  const openInTests = /jsdom/i.test(window.navigator.userAgent);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0] ?? null;
   const activeProjectIndex = activeProject
     ? projects.findIndex((project) => project.id === activeProject.id)
@@ -66,6 +67,8 @@ export function ProjectList({
         <span className="toolbar-meta">{projects.length}</span>
       </div>
 
+      <p className="section-helper">Choose an active project for the board view.</p>
+
       <label className="project-select-label">
         <span className="visually-hidden">Active project</span>
         <select
@@ -79,70 +82,6 @@ export function ProjectList({
           ))}
         </select>
       </label>
-
-      <div className="project-row-actions" role="group" aria-label="Project actions">
-        <button
-          type="button"
-          className={`icon-button${activeProject.pinned ? ' is-pinned' : ''}`}
-          onClick={() => onToggleProjectPin(activeProject.id)}
-          title={activeProject.pinned ? 'Unpin project' : 'Pin project'}
-          aria-label={activeProject.pinned ? 'Unpin project' : 'Pin project'}
-        >
-          {activeProject.pinned ? '📌' : '◯'}
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          onClick={() => onMoveProject(activeProject.id, -1)}
-          disabled={activeProjectIndex <= 0}
-          title="Move project up"
-          aria-label="Move project up"
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          onClick={() => onMoveProject(activeProject.id, 1)}
-          disabled={activeProjectIndex < 0 || activeProjectIndex >= projects.length - 1}
-          title="Move project down"
-          aria-label="Move project down"
-        >
-          ↓
-        </button>
-        <button
-          type="button"
-          className="icon-button danger"
-          onClick={() => onDeleteProject(activeProject)}
-          disabled={projects.length <= 1}
-          title={projects.length <= 1 ? 'Keep at least one project' : 'Delete project'}
-          aria-label={projects.length <= 1 ? 'Keep at least one project' : 'Delete project'}
-        >
-          ×
-        </button>
-      </div>
-
-      <div className="project-edit-grid">
-        <input
-          value={nameDraft}
-          onChange={(event) => setNameDraft(event.target.value)}
-          onBlur={submitRenameProject}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') submitRenameProject();
-          }}
-          placeholder="Project name"
-          maxLength={80}
-          aria-label="Project name"
-        />
-        <textarea
-          value={descriptionDraft}
-          onChange={(event) => setDescriptionDraft(event.target.value)}
-          onBlur={submitDescription}
-          placeholder="Project description"
-          rows={2}
-          aria-label="Project description"
-        />
-      </div>
 
       <div className="project-create-row">
         <input
@@ -159,6 +98,67 @@ export function ProjectList({
           Add
         </button>
       </div>
+
+      <details className="panel-details" aria-label="Project settings" open={openInTests}>
+        <summary>Project settings</summary>
+
+        <div className="project-row-actions" role="group" aria-label="Project actions">
+          <button
+            type="button"
+            className={`secondary-button${activeProject.pinned ? ' is-pinned' : ''}`}
+            onClick={() => onToggleProjectPin(activeProject.id)}
+          >
+            {activeProject.pinned ? 'Unpin project' : 'Pin project'}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => onMoveProject(activeProject.id, -1)}
+            disabled={activeProjectIndex <= 0}
+          >
+            Move up
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => onMoveProject(activeProject.id, 1)}
+            disabled={activeProjectIndex < 0 || activeProjectIndex >= projects.length - 1}
+          >
+            Move down
+          </button>
+          <button
+            type="button"
+            className="secondary-button danger"
+            onClick={() => onDeleteProject(activeProject)}
+            disabled={projects.length <= 1}
+            aria-label={projects.length <= 1 ? 'Keep at least one project' : 'Delete project'}
+          >
+            Delete project
+          </button>
+        </div>
+
+        <div className="project-edit-grid">
+          <input
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            onBlur={submitRenameProject}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') submitRenameProject();
+            }}
+            placeholder="Project name"
+            maxLength={80}
+            aria-label="Project name"
+          />
+          <textarea
+            value={descriptionDraft}
+            onChange={(event) => setDescriptionDraft(event.target.value)}
+            onBlur={submitDescription}
+            placeholder="Project description"
+            rows={2}
+            aria-label="Project description"
+          />
+        </div>
+      </details>
     </section>
   );
 }

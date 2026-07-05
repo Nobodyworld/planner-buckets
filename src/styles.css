@@ -783,13 +783,13 @@ h1 {
 
 .data-action-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 8px;
 }
 
 .export-action-row {
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 1fr;
 }
 
 .data-options-button {
@@ -842,24 +842,67 @@ h1 {
   background: color-mix(in oklab, var(--surface) 80%, var(--primary) 20%);
 }
 
-.help-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.76rem;
-  font-weight: 800;
-  background: color-mix(in oklab, var(--surface) 90%, transparent);
-  cursor: help;
-}
-
 .data-message {
   margin: 0;
   color: var(--muted);
   font-size: 0.78rem;
+}
+
+.section-helper {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.panel-details {
+  margin-top: 8px;
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+  background: var(--popup-surface-soft);
+  overflow: hidden;
+}
+
+.panel-details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 9px 11px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.panel-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel-details > summary::before {
+  content: "▸";
+  margin-right: 8px;
+  color: var(--muted);
+}
+
+.panel-details[open] > summary::before {
+  content: "▾";
+}
+
+.panel-details[open] > summary {
+  border-bottom: 1px solid var(--popup-border);
+}
+
+.panel-details > :not(summary) {
+  padding: 10px;
+}
+
+.bucket-create-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bucket-create-row input {
+  min-width: 0;
+  flex: 1;
 }
 
 .icon-button.inline-confirm-accept,
@@ -1837,6 +1880,13 @@ select:focus {
 
 .archive-controls .inline-toggle {
   font-size: 0.84rem;
+}
+
+.archive-controls-expanded {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .archive-meta {
@@ -3045,6 +3095,14 @@ h1 {
   flex-wrap: wrap;
 }
 
+.project-row-actions .secondary-button,
+.template-row-actions .secondary-button,
+.template-definition-actions .secondary-button {
+  min-height: 30px;
+  font-size: 0.78rem;
+  padding: 6px 10px;
+}
+
 .project-edit-grid textarea {
   min-height: 54px;
   resize: vertical;
@@ -3110,8 +3168,8 @@ h1 {
 }
 
 .global-bucket-view h3 {
-  margin: 4px 0 0;
-  font-size: 0.95rem;
+  margin: 0;
+  font-size: 0.9rem;
 }
 
 .global-bucket-group ul {
