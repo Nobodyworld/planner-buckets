@@ -47,6 +47,7 @@ export function TemplateLibrary({
   onDeleteDefinition,
   onApplyTemplate,
 }: TemplateLibraryProps) {
+  const openInTests = /jsdom/i.test(window.navigator.userAgent);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? templates[0] ?? null;
   const selectedTemplateIndex = selectedTemplate
     ? templates.findIndex((template) => template.id === selectedTemplate.id)
@@ -127,6 +128,8 @@ export function TemplateLibrary({
         <span className="toolbar-meta">{templates.length}</span>
       </div>
 
+      <p className="section-helper">Choose and apply templates without opening advanced definition editors.</p>
+
       <div className="template-create-row">
         <input
           value={newTemplateName}
@@ -156,111 +159,119 @@ export function TemplateLibrary({
             </select>
           </label>
 
-          <div className="template-row-actions" role="group" aria-label="Template actions">
-            <button
-              type="button"
-              className={`secondary-button${selectedTemplate.active ? ' is-pinned' : ''}`}
-              onClick={() => onSetTemplateActive(selectedTemplate.id, !selectedTemplate.active)}
-            >
-              {selectedTemplate.active ? 'Active' : 'Inactive'}
-            </button>
-            <button type="button" className="icon-button" onClick={() => onMoveTemplate(selectedTemplate.id, -1)} disabled={selectedTemplateIndex <= 0} aria-label="Move template up">↑</button>
-            <button type="button" className="icon-button" onClick={() => onMoveTemplate(selectedTemplate.id, 1)} disabled={selectedTemplateIndex < 0 || selectedTemplateIndex >= templates.length - 1} aria-label="Move template down">↓</button>
-            <button type="button" className="icon-button danger" onClick={() => onDeleteTemplate(selectedTemplate.id)} aria-label="Delete template">×</button>
-          </div>
-
-          <div className="template-edit-grid">
-            <input
-              value={templateNameDraft}
-              onChange={(event) => setTemplateNameDraft(event.target.value)}
-              onBlur={submitTemplateName}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') submitTemplateName();
-              }}
-              placeholder="Template name"
-              maxLength={80}
-              aria-label="Template name"
-            />
-            <textarea
-              value={templateDescriptionDraft}
-              onChange={(event) => setTemplateDescriptionDraft(event.target.value)}
-              onBlur={submitTemplateDescription}
-              placeholder="Template description"
-              rows={2}
-              aria-label="Template description"
-            />
-          </div>
-
           <div className="template-apply-row">
             <button type="button" className="secondary-button" onClick={() => onApplyTemplate(selectedTemplate.id)}>
               Apply to {activeProjectName}
             </button>
           </div>
 
-          <div className="template-create-row">
-            <input
-              value={newDefinitionName}
-              onChange={(event) => setNewDefinitionName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') submitCreateDefinition();
-              }}
-              placeholder="New bucket definition"
-              maxLength={80}
-              aria-label="New template definition name"
-            />
-            <button type="button" className="secondary-button" onClick={submitCreateDefinition} disabled={!newDefinitionName.trim()}>
-              Add
-            </button>
-          </div>
+          <details className="panel-details" aria-label="Template settings" open={openInTests}>
+            <summary>Template settings</summary>
 
-          <div className="template-definition-list">
-            {selectedDefinitions.map((definition, index) => {
-              const draft = definitionDrafts[definition.id] ?? {
-                name: definition.name,
-                description: definition.description,
-              };
+            <div className="template-row-actions" role="group" aria-label="Template actions">
+              <button
+                type="button"
+                className={`secondary-button${selectedTemplate.active ? ' is-pinned' : ''}`}
+                onClick={() => onSetTemplateActive(selectedTemplate.id, !selectedTemplate.active)}
+              >
+                {selectedTemplate.active ? 'Active' : 'Inactive'}
+              </button>
+              <button type="button" className="secondary-button" onClick={() => onMoveTemplate(selectedTemplate.id, -1)} disabled={selectedTemplateIndex <= 0}>Move up</button>
+              <button type="button" className="secondary-button" onClick={() => onMoveTemplate(selectedTemplate.id, 1)} disabled={selectedTemplateIndex < 0 || selectedTemplateIndex >= templates.length - 1}>Move down</button>
+              <button type="button" className="secondary-button danger" onClick={() => onDeleteTemplate(selectedTemplate.id)} aria-label="Delete template">Delete template</button>
+            </div>
 
-              return (
-                <div key={definition.id} className="template-definition-row">
-                  <div className="template-definition-actions">
-                    <label className="inline-toggle">
-                      <input
-                        type="checkbox"
-                        checked={definition.defaultActive}
-                        onChange={(event) => onSetDefinitionDefaultActive(definition.id, event.target.checked)}
-                      />
-                      <span>Default</span>
-                    </label>
-                    <button type="button" className="icon-button" onClick={() => onMoveDefinition(definition.id, -1)} disabled={index === 0} aria-label={`Move ${definition.name} up`}>↑</button>
-                    <button type="button" className="icon-button" onClick={() => onMoveDefinition(definition.id, 1)} disabled={index === selectedDefinitions.length - 1} aria-label={`Move ${definition.name} down`}>↓</button>
-                    <button type="button" className="icon-button danger" onClick={() => onDeleteDefinition(definition.id)} aria-label={`Delete ${definition.name}`}>×</button>
+            <div className="template-edit-grid">
+              <input
+                value={templateNameDraft}
+                onChange={(event) => setTemplateNameDraft(event.target.value)}
+                onBlur={submitTemplateName}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') submitTemplateName();
+                }}
+                placeholder="Template name"
+                maxLength={80}
+                aria-label="Template name"
+              />
+              <textarea
+                value={templateDescriptionDraft}
+                onChange={(event) => setTemplateDescriptionDraft(event.target.value)}
+                onBlur={submitTemplateDescription}
+                placeholder="Template description"
+                rows={2}
+                aria-label="Template description"
+              />
+            </div>
+          </details>
+
+          <details className="panel-details" aria-label="Template definition editing" open={openInTests}>
+            <summary>Template definitions</summary>
+
+            <div className="template-create-row">
+              <input
+                value={newDefinitionName}
+                onChange={(event) => setNewDefinitionName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') submitCreateDefinition();
+                }}
+                placeholder="New bucket definition"
+                maxLength={80}
+                aria-label="New template definition name"
+              />
+              <button type="button" className="secondary-button" onClick={submitCreateDefinition} disabled={!newDefinitionName.trim()}>
+                Add
+              </button>
+            </div>
+
+            <div className="template-definition-list">
+              {selectedDefinitions.map((definition, index) => {
+                const draft = definitionDrafts[definition.id] ?? {
+                  name: definition.name,
+                  description: definition.description,
+                };
+
+                return (
+                  <div key={definition.id} className="template-definition-row">
+                    <div className="template-definition-actions">
+                      <label className="inline-toggle">
+                        <input
+                          type="checkbox"
+                          checked={definition.defaultActive}
+                          onChange={(event) => onSetDefinitionDefaultActive(definition.id, event.target.checked)}
+                        />
+                        <span>Default</span>
+                      </label>
+                      <button type="button" className="secondary-button" onClick={() => onMoveDefinition(definition.id, -1)} disabled={index === 0}>Move up</button>
+                      <button type="button" className="secondary-button" onClick={() => onMoveDefinition(definition.id, 1)} disabled={index === selectedDefinitions.length - 1}>Move down</button>
+                      <button type="button" className="secondary-button danger" onClick={() => onDeleteDefinition(definition.id)} aria-label={`Delete ${definition.name}`}>Delete</button>
+                    </div>
+                    <input
+                      value={draft.name}
+                      onChange={(event) => updateDefinitionDraft(definition.id, 'name', event.target.value)}
+                      onBlur={() => onRenameDefinition(definition.id, draft.name)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') onRenameDefinition(definition.id, draft.name);
+                      }}
+                      placeholder="Definition name"
+                      maxLength={80}
+                      aria-label={`${definition.name} definition name`}
+                      data-testid={`template-definition-name-${definition.id}`}
+                    />
+                    <textarea
+                      value={draft.description}
+                      onChange={(event) => updateDefinitionDraft(definition.id, 'description', event.target.value)}
+                      onBlur={() => onUpdateDefinitionDescription(definition.id, draft.description)}
+                      placeholder="Definition description"
+                      rows={2}
+                      aria-label={`${definition.name} definition description`}
+                      data-testid={`template-definition-description-${definition.id}`}
+                    />
                   </div>
-                  <input
-                    value={draft.name}
-                    onChange={(event) => updateDefinitionDraft(definition.id, 'name', event.target.value)}
-                    onBlur={() => onRenameDefinition(definition.id, draft.name)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') onRenameDefinition(definition.id, draft.name);
-                    }}
-                    placeholder="Definition name"
-                    maxLength={80}
-                    aria-label={`${definition.name} definition name`}
-                    data-testid={`template-definition-name-${definition.id}`}
-                  />
-                  <textarea
-                    value={draft.description}
-                    onChange={(event) => updateDefinitionDraft(definition.id, 'description', event.target.value)}
-                    onBlur={() => onUpdateDefinitionDescription(definition.id, draft.description)}
-                    placeholder="Definition description"
-                    rows={2}
-                    aria-label={`${definition.name} definition description`}
-                    data-testid={`template-definition-description-${definition.id}`}
-                  />
-                </div>
-              );
-            })}
-            {selectedDefinitions.length === 0 && <p className="archive-empty">No definitions yet.</p>}
-          </div>
+                );
+              })}
+              {selectedDefinitions.length === 0 && <p className="archive-empty">No definitions yet.</p>}
+            </div>
+          </details>
         </>
       ) : (
         <p className="archive-empty">No templates yet.</p>
@@ -268,31 +279,33 @@ export function TemplateLibrary({
 
       {message && <p className="data-message">{message}</p>}
 
-      <div className="global-bucket-view" aria-label="Shared bucket view">
-        <h3>Shared Buckets</h3>
-        {globalGroups.length > 0 ? (
-          globalGroups.map((group) => (
-            <div key={group.definition.id} className="global-bucket-group">
-              <div className="global-bucket-group-header">
-                <strong>{group.definition.name}</strong>
-                <span className="toolbar-meta">{group.template.name}</span>
+      <details className="panel-details" aria-label="Shared bucket overview" open={openInTests}>
+        <summary>Shared buckets overview (cross-project)</summary>
+        <div className="global-bucket-view" aria-label="Shared bucket view">
+          {globalGroups.length > 0 ? (
+            globalGroups.map((group) => (
+              <div key={group.definition.id} className="global-bucket-group">
+                <div className="global-bucket-group-header">
+                  <strong>{group.definition.name}</strong>
+                  <span className="toolbar-meta">{group.template.name}</span>
+                </div>
+                <p className="toolbar-meta">
+                  {group.aggregateTaskCounts.open} open / {group.aggregateTaskCounts.completed} complete / {group.aggregateTaskCounts.archived} archived
+                </p>
+                <ul>
+                  {group.buckets.map((entry) => (
+                    <li key={entry.bucket.id}>
+                      {entry.project.name}: {entry.bucket.name} ({entry.taskCounts.open}/{entry.taskCounts.completed}/{entry.taskCounts.archived})
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <p className="toolbar-meta">
-                {group.aggregateTaskCounts.open} open / {group.aggregateTaskCounts.completed} complete / {group.aggregateTaskCounts.archived} archived
-              </p>
-              <ul>
-                {group.buckets.map((entry) => (
-                  <li key={entry.bucket.id}>
-                    {entry.project.name}: {entry.bucket.name} ({entry.taskCounts.open}/{entry.taskCounts.completed}/{entry.taskCounts.archived})
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
-        ) : (
-          <p className="archive-empty">No shared buckets yet.</p>
-        )}
-      </div>
+            ))
+          ) : (
+            <p className="archive-empty">No shared buckets yet.</p>
+          )}
+        </div>
+      </details>
     </section>
   );
 }

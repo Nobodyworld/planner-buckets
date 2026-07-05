@@ -35,12 +35,14 @@ If you clear site storage, local data is removed. Use Export JSON for backups.
 ## Features
 
 Project and board management:
+
 - Multiple projects with pinned ordering
 - Bucket columns with drag-and-drop bucket reordering
 - Permanent Unassigned lane for unbucketed tasks
 - Pin buckets into the left group for stable triage workflows
 
 Task workflow:
+
 - Create, edit, delete, pin, and complete tasks
 - Drag-and-drop task ordering within and across buckets
 - Multi-select with Ctrl/Cmd and Shift range selection
@@ -48,17 +50,20 @@ Task workflow:
 - Search by task title and description
 
 Template workflow:
+
 - Reusable bucket templates and template definitions
 - Apply templates to projects without manual bucket creation
 - Shared bucket view aggregates bucket definitions across projects
 
 Data and safety controls:
+
 - JSON export with scoped export options
 - JSON upload merge flow with identity remapping
 - JSON restore with confirmation safeguards
 - Undo/redo history around reducer actions
 
 UX controls:
+
 - Sidepanel with manual show/hide and lock behavior
 - Board zoom controls with persistence
 - Visual modes (Calm, Balanced, Energetic)
@@ -67,6 +72,7 @@ UX controls:
 ## Quick start
 
 Requirements:
+
 - Node.js 20, 22, or 24
 
 ```bash
@@ -74,7 +80,7 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:5173.
+Then open <http://localhost:5173>.
 
 ## Windows start script
 
