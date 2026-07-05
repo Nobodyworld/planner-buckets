@@ -1,148 +1,135 @@
-# Buckets & Shovels Planner
+# Planner Buckets
 
-A local-first bucket planner built with React, TypeScript, and Vite.
+Local-first planning board for projects, buckets, and tasks.
 
-Designed for fast personal planning with zero backend setup.
+Planner Buckets runs fully in your browser with no backend required, while still supporting practical workflows like templates, archived-task handling, import/export, and undo/redo.
 
-## License
+## Why this exists
 
-MIT. See `LICENSE`.
+Most lightweight planning apps are either too minimal for real work or too dependent on cloud setup. Planner Buckets is designed for people who want:
 
-## Screenshots
+- A fast, visual planning surface
+- Durable local workflows without account friction
+- Portable JSON data they can back up, audit, and move
+
+## Privacy and local data
+
+Planner data is stored in your browser localStorage.
+
+- Data stays on your machine unless you explicitly export and share JSON
+- Upload and restore are user-triggered actions only
+- Clipboard actions copy task text only when you trigger them
+
+If you clear site storage, local data is removed. Use Export JSON for backups.
+
+## Gallery
 
 ![Planner overview](docs/images/planner-overview.png)
 
-![Planner detail view: board focus](docs/images/planner-board-focus.png)
+![Projects and board focus](docs/images/planner-projects.png)
 
-![Planner detail view: header](docs/images/planner-header.png)
+![Template library and shared buckets](docs/images/planner-templates.png)
 
-![Planner detail view: controls strip](docs/images/planner-controls-strip.png)
-
-The gallery includes one full overview image plus focused detail views, all stored in `docs/images/`.
-
-## Architecture
-
-```mermaid
-flowchart LR
-   UI[React UI\nApp + Components] --> Actions[Planner Actions]
-   Actions --> History[Undo/Redo History Wrapper]
-   History --> Reducer[plannerReducer]
-   Reducer --> State[Planner Data\nBuckets + Tasks]
-   State --> Storage[localStorage Persistence]
-   Storage --> ImportExport[JSON Export / Restore / Merge]
-   State --> UI
-```
+![Data controls and export scope](docs/images/planner-data-controls.png)
 
 ## Features
 
-- Task create, edit, delete, and completion
-- Nameable buckets
-- Permanent Unassigned column
-- Pin tasks to the top of a bucket and pin buckets into the left group
-- Drag tasks between buckets and reorder within each bucket
-- Multi-select tasks with click, Ctrl/Cmd+click, and Shift+click
-- Copy selected tasks and paste them into another bucket
-- Left control panel for task, bucket, and data actions, with autohide and an automatic-open lock
-- Copy an individual task or copy all active tasks in a bucket as an ordered clipboard list
-- Undo and redo across reducer-driven planner actions
-- Search tasks by title/notes
-- Toggle completed task visibility
-- Archive completed tasks
-- Undo archived tasks
-- Board zoom, visual mode, and light/dark theme controls with persistence
-- Automatic local browser storage
-- JSON backup, restore, and merge upload
-- Reducer unit tests
+Project and board management:
+- Multiple projects with pinned ordering
+- Bucket columns with drag-and-drop bucket reordering
+- Permanent Unassigned lane for unbucketed tasks
+- Pin buckets into the left group for stable triage workflows
 
-## Tech stack
+Task workflow:
+- Create, edit, delete, pin, and complete tasks
+- Drag-and-drop task ordering within and across buckets
+- Multi-select with Ctrl/Cmd and Shift range selection
+- Copy selected tasks and paste into target buckets
+- Search by task title and description
 
-- React 18 + TypeScript
-- Vite 5
-- Vitest for unit tests
+Template workflow:
+- Reusable bucket templates and template definitions
+- Apply templates to projects without manual bucket creation
+- Shared bucket view aggregates bucket definitions across projects
+
+Data and safety controls:
+- JSON export with scoped export options
+- JSON upload merge flow with identity remapping
+- JSON restore with confirmation safeguards
+- Undo/redo history around reducer actions
+
+UX controls:
+- Sidepanel with manual show/hide and lock behavior
+- Board zoom controls with persistence
+- Visual modes (Calm, Balanced, Energetic)
+- Light and dark themes
 
 ## Quick start
 
-Requirements: Node.js 20, 22, or 24.
+Requirements:
+- Node.js 20, 22, or 24
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` (or the URL shown by Vite).
+Then open http://localhost:5173.
 
-## Windows shortcut
+## Windows start script
 
-Double-click `start-local.cmd`, or run:
+Use either:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
-```
+- `start-local.cmd`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1`
 
-## NPM scripts
+## Testing and quality
+
+Core checks:
 
 ```bash
-npm run dev
 npm test
+npm run verify
 npm run build
-npm run preview
-npm run verify
 ```
 
-If dependency install fails after upgrading Node or changing registries, remove `node_modules` and `package-lock.json`, then run `npm install` again.
+`npm run verify` is the primary pre-PR validation gate used by CI.
 
-## Quality check before commit
+## Architecture (v2)
 
-```bash
-npm run verify
+The app now runs on a v2 data model (`PlannerDataV2`) with explicit entities for projects, buckets, tasks, templates, and template definitions.
+
+```mermaid
+flowchart LR
+   UI[React UI] --> Actions[User Actions]
+   Actions --> History[Undo/Redo Wrapper]
+   History --> Reducer[plannerReducer v2]
+   Reducer --> State[PlannerDataV2]
+   State --> Persist[plannerPersistence localStorage v2]
+   Persist --> ImportExport[JSON Export Upload Restore]
+   ImportExport --> Validation[Schema and integrity validators]
+   Validation --> State
 ```
 
-On Windows, `scripts\verify.ps1` runs both checks.
+v2 notes:
 
-## Data and privacy
+- Migration path from v1 to v2 is built into persistence loading
+- Integrity validators enforce relational consistency across projects, buckets, tasks, and template definitions
+- Local storage uses versioned keys for safer recovery behavior
 
-The planner saves in browser `localStorage`. Clearing browser site data removes that copy, so use **Export JSON** for backups.
+## Repository map
 
-Use **Upload JSON** to merge a valid export into the current planner. Upload creates fresh IDs for imported items, merges buckets by matching names, and skips duplicate task title/note pairs in the target bucket. Use **Restore JSON** when you want to replace the current planner after confirmation.
+- `src/App.tsx`: primary composition, controls, and UI wiring
+- `src/state/plannerReducer.ts`: deterministic state transitions
+- `src/services/plannerPersistence.ts`: v1/v2 loading, migration, and persistence
+- `src/types/v2.ts`: v2 schema contracts
+- `src/types/validators.ts`: structural and relational validation rules
+- `src/components/`: board and editor UI components
 
-Copy actions write only the selected task text or bucket task list to your system clipboard.
+## Release status
 
-No data leaves your machine unless you manually export and share JSON.
+This repository does not currently have a public `v2.0.0` release tag.
 
-## Project structure
+## License
 
-- `src/App.tsx` — top-level composition, filters, import/export, editor state
-- `src/components/` — UI pieces (`BucketColumn`, `TaskCard`, `TaskEditor`)
-- `src/state/plannerReducer.ts` — deterministic planner operations
-- `src/storage/plannerStorage.ts` — local persistence and import validation
-- `src/types.ts` — shared domain types
-
-## Accessibility and UX notes
-
-- Keyboard focus styling across controls
-- Labeled form and file inputs
-- Modal closes on backdrop click
-- Drag/drop plus button-based task actions for non-drag users
-- Clipboard copy actions have text labels or descriptive button labels
-- The side panel can autohide; the lock disables automatic opening without preventing manual Show/Hide
-
-## Export and history audit notes
-
-- Export sample files matching `bucket-planner-*.json` are ignored by `.gitignore` and are not currently tracked.
-- Current tracked history is short and readable: initial release, hardening/public-readiness work, and the latest interaction polish commit.
-- The sample JSON schema contains planner content only: bucket/task metadata, completion state, timestamps, and archive state.
-- No credentials or environment secrets are documented in tracked repo files reviewed during this pass.
-
-## Repository standards
-
-- CI: GitHub Actions runs `npm run verify` on pushes and pull requests.
-- Release: GitHub Actions can publish releases from `v*` tags via `.github/workflows/release.yml`.
-- Line endings and whitespace: enforced by `.editorconfig` and `.gitattributes`.
-- Pull request template: `.github/pull_request_template.md`.
-- Issue templates: `.github/ISSUE_TEMPLATE/`.
-
-## Main files
-
-- `PLAN.md` — product intent and version-one boundaries
-- `README.md` — setup and operational guidance
-- `CHANGELOG.md` — release and change history
+MIT. See `LICENSE`.

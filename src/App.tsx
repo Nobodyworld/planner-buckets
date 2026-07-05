@@ -212,9 +212,9 @@ const THEME_STORAGE_KEY = 'planner-buckets:theme';
 const VISUAL_MODE_STORAGE_KEY = 'planner-buckets:visual-mode';
 const MIN_BOARD_ZOOM_INDEX = 0;
 const MAX_BOARD_ZOOM_INDEX = 4;
-const APP_NAME = 'Buckets & Shovels Planner';
-const APP_BANNER = 'B.S. Planner';
-const APP_ICON_TEXT = 'BSP';
+const APP_NAME = 'Planner Buckets';
+const APP_BANNER = 'Local-First Task Planning';
+const APP_ICON_TEXT = 'PB';
 
 export default function App() {
   const [initialLoadResult] = useState(() => loadPlannerDataV2FromLocalStorage());
