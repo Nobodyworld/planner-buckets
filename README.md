@@ -132,9 +132,11 @@ v2 notes:
 - `src/types/validators.ts`: structural and relational validation rules
 - `src/components/`: board and editor UI components
 
-## Release status
+## Release
 
-This repository does not currently have a public `v2.0.0` release tag.
+Current showcase baseline: `1.1.0`.
+
+Public release artifacts are managed through GitHub Releases.
 
 ## License
 
