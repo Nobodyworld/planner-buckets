@@ -21,6 +21,6 @@ You will receive acknowledgment as soon as possible, followed by validation and 
 
 ## Data handling notes
 
-Buckets & Shovels Planner stores data in browser local storage by default.
+Planner Buckets stores data in browser local storage by default.
 Review exported JSON files carefully before sharing.
 Clipboard copy actions place selected task text on your system clipboard only after you click a copy control.
