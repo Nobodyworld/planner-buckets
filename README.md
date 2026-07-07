@@ -26,11 +26,11 @@ If you clear site storage, local data is removed. Use Export JSON for backups.
 
 ![Planner overview](docs/images/planner-overview.png)
 
-![Projects and board focus](docs/images/planner-projects.png)
+![Board workflow](docs/images/planner-board.png)
 
-![Template library and shared buckets](docs/images/planner-templates.png)
+![Projects and quick controls](docs/images/planner-projects.png)
 
-![Data controls and export scope](docs/images/planner-data-controls.png)
+![Header controls](docs/images/planner-header-controls.png)
 
 ## Features
 
