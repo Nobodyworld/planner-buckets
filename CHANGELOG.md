@@ -6,6 +6,19 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-06
+
+### Changed
+
+- Extracted the planner sidepanel into focused components for improved maintainability.
+- Reordered the sidepanel flow to Projects, Quick Add, Buckets, Templates, Archive, and Data.
+- Updated Vite/Vitest tooling and release workflow dependencies.
+- Bumped project metadata to version 1.1.0 for the public showcase release baseline.
+
+### Fixed
+
+- Resolved dependency audit findings so the release baseline has zero reported npm vulnerabilities.
+
 ## [1.0.1] - 2026-06-30
 
 ### Fixed
@@ -19,7 +32,6 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Clipboard copy actions for individual tasks and ordered active task lists per bucket.
 - Multi-select task copy/paste between buckets.
 - Undo and redo history wrapper for reducer-driven planner actions.
-- Repository hygiene baseline for private-to-public readiness.
 - GitHub Actions CI workflow for build/test verification.
 - Contribution, security, and pull request templates.
 - MIT license and README architecture/screenshot documentation.
