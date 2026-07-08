@@ -15,3 +15,4 @@ pnpm-debug.log*
 .cache
 Thumbs.db
 bucket-planner-*.json
+bsp-planner-*.json
