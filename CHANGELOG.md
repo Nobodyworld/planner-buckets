@@ -6,11 +6,20 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Added
+
+- Added a pull request template with validation, screenshot, and release-safety prompts.
+
+### Changed
+
+- Clarified localStorage privacy notes in the README and security policy.
+
 ### Fixed
 
 - Cleaned up stale public-facing product naming in docs and the local start script.
 - Aligned contributor guidance with the current v2 reducer path and JSON export filename.
 - Aligned package metadata description with the public README positioning.
+- Added the current `bsp-planner-*.json` export filename pattern to `.gitignore` while preserving the older export pattern.
 
 ## [1.1.0] - 2026-07-06
 
