@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Buckets & Shovels Planner.
+Thanks for helping improve Planner Buckets.
 
 ## Development setup
 
@@ -11,7 +11,7 @@ Thanks for helping improve Buckets & Shovels Planner.
 npm install
 ```
 
-1. Run locally:
+3. Run locally:
 
 ```bash
 npm run dev
@@ -27,7 +27,7 @@ npm run dev
 npm run verify
 ```
 
-1. Open a PR with:
+4. Open a PR with:
 
 - What changed
 - Why it changed
@@ -43,11 +43,12 @@ npm run verify
 
 ## Testing guidelines
 
-- Add or update reducer tests for logic changes in `src/state/plannerReducer.ts`.
+- Add or update reducer tests for logic changes in `src/state/plannerReducerV2.ts`.
+- For v1 compatibility, migration, or import/export changes, include coverage near the relevant import, persistence, or migration tests.
 - For UI behavior changes, include manual test steps in the PR. Cover affected drag/drop, clipboard, sidepanel, import/export, and responsive states when relevant.
 
 ## Security and privacy
 
 - Do not commit secrets or tokens.
-- Do not commit local export files (`bucket-planner-*.json`).
+- Do not commit local export files (`bsp-planner-*.json`).
 - Follow [SECURITY.md](SECURITY.md) for reporting vulnerabilities.

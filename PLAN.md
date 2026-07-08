@@ -1,4 +1,4 @@
-# Buckets & Shovels Planner — Simple Build Plan
+# Planner Buckets — Simple Build Plan
 
 ## Intent
 

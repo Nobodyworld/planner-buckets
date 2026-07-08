@@ -19,5 +19,5 @@ if (
     npm install
 }
 
-Write-Host "Starting Buckets & Shovels Planner..."
+Write-Host "Starting Planner Buckets..."
 npm run dev
