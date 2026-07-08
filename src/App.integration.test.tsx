@@ -396,6 +396,107 @@ const readRuntimePlannerData = (): PlannerDataV2 => (
     JSON.parse(localStorage.getItem(V2_STORAGE_KEY) ?? '{}') as PlannerDataV2
 );
 
+const createDragDataTransfer = (): DataTransfer => {
+    const values = new Map<string, string>();
+    return {
+        dropEffect: 'none',
+        effectAllowed: 'all',
+        files: [] as unknown as FileList,
+        items: [] as unknown as DataTransferItemList,
+        types: [],
+        clearData: vi.fn((type?: string) => {
+            if (type) {
+                values.delete(type);
+                return;
+            }
+            values.clear();
+        }),
+        getData: vi.fn((type: string) => values.get(type) ?? ''),
+        setData: vi.fn((type: string, value: string) => {
+            values.set(type, value);
+        }),
+        setDragImage: vi.fn(),
+    } as unknown as DataTransfer;
+};
+
+const mockBoardFrameGeometry = (frame: HTMLElement) => {
+    Object.defineProperty(frame, 'clientWidth', { value: 520, configurable: true });
+    Object.defineProperty(frame, 'scrollWidth', { value: 2200, configurable: true });
+    Object.defineProperty(frame, 'scrollLeft', { value: 0, writable: true, configurable: true });
+    vi.spyOn(frame, 'getBoundingClientRect').mockReturnValue({
+        x: 80,
+        y: 120,
+        left: 80,
+        top: 120,
+        right: 600,
+        bottom: 620,
+        width: 520,
+        height: 500,
+        toJSON: () => ({}),
+    });
+};
+
+const fireBoardDragOver = (target: HTMLElement, clientX: number, dataTransfer: DataTransfer) => {
+    const event = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clientX', { value: clientX });
+    Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+    fireEvent(target, event);
+};
+
+const setupAnimationFrameQueue = () => {
+    const callbacks: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+        callbacks.push(callback);
+        return callbacks.length;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    return callbacks;
+};
+
+const overflowingBoardFixture: PlannerDataV2 = {
+    ...plannerV2Fixture,
+    projects: [
+        {
+            id: 'project-overflow',
+            name: 'Overflow',
+            description: '',
+            priority: 0,
+            pinned: true,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+    ],
+    buckets: Array.from({ length: 9 }, (_, index) => ({
+        id: `bucket-overflow-${index + 1}`,
+        projectId: 'project-overflow',
+        name: `Bucket ${index + 1}`,
+        description: '',
+        templateDefinitionId: null,
+        priority: 0,
+        pinned: false,
+        createdAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+        updatedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+    })),
+    tasks: [
+        {
+            id: 'task-overflow-1',
+            projectId: 'project-overflow',
+            title: 'Overflow task',
+            description: '',
+            bucketId: 'bucket-overflow-1',
+            priority: 0,
+            resourceTags: [],
+            pinned: false,
+            completed: false,
+            archivedAt: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+    ],
+    templates: [],
+    templateDefinitions: [],
+};
+
 describe('App integration', () => {
     beforeEach(() => {
         localStorage.clear();
@@ -663,6 +764,60 @@ describe('App integration', () => {
         fireEvent.keyDown(input, { key: 'Enter' });
 
         expect(screen.getByRole('heading', { name: 'Board Added Bucket' })).toBeInTheDocument();
+    });
+
+    it('horizontally autoscrolls the board when dragging a task near the right edge', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(overflowingBoardFixture);
+        const animationFrameCallbacks = setupAnimationFrameQueue();
+        const { container } = render(<App />);
+
+        const frame = container.querySelector('.board-frame') as HTMLElement;
+        mockBoardFrameGeometry(frame);
+
+        const taskCard = screen.getByRole('button', { name: 'Overflow task' }).closest('.task-card') as HTMLElement;
+        const dataTransfer = createDragDataTransfer();
+
+        fireEvent.dragStart(taskCard, { dataTransfer });
+        await waitFor(() => expect(taskCard).toHaveClass('is-dragging'));
+        fireBoardDragOver(frame, 592, dataTransfer);
+
+        await waitFor(() => expect(animationFrameCallbacks.length).toBeGreaterThan(0));
+
+        act(() => {
+            animationFrameCallbacks.shift()?.(16);
+        });
+
+        expect(frame.scrollLeft).toBeGreaterThan(0);
+
+        fireEvent.dragEnd(taskCard);
+    });
+
+    it('horizontally autoscrolls the board when dragging a bucket near the right edge', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(overflowingBoardFixture);
+        const animationFrameCallbacks = setupAnimationFrameQueue();
+        const { container } = render(<App />);
+
+        const frame = container.querySelector('.board-frame') as HTMLElement;
+        mockBoardFrameGeometry(frame);
+
+        const bucketDragHandle = screen.getAllByRole('button', { name: 'Drag to move bucket' })[0];
+        const dataTransfer = createDragDataTransfer();
+
+        fireEvent.dragStart(bucketDragHandle, { dataTransfer });
+        await waitFor(() => expect(container.querySelector('.bucket-drop-slot.visible')).not.toBeNull());
+        fireBoardDragOver(frame, 592, dataTransfer);
+
+        await waitFor(() => expect(animationFrameCallbacks.length).toBeGreaterThan(0));
+
+        act(() => {
+            animationFrameCallbacks.shift()?.(16);
+        });
+
+        expect(frame.scrollLeft).toBeGreaterThan(0);
+
+        fireEvent.dragEnd(bucketDragHandle);
     });
 
     it('starts an empty browser storage with the v1 default board buckets', async () => {

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { BucketColumn } from './components/BucketColumn';
 import { ProjectBoard } from './components/ProjectBoard';
 import { TaskEditor } from './components/TaskEditor';
@@ -49,6 +49,8 @@ const ensureScrollableTargetInView = (
 const UPLOAD_HALO_DURATION_MS = 120000;
 const DROP_SETTLE_DURATION_MS = 1500;
 const QUICK_TASK_BUCKET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _-]*$/;
+const BOARD_EDGE_AUTOSCROLL_ZONE_PX = 96;
+const BOARD_EDGE_AUTOSCROLL_MAX_SPEED_PX = 24;
 
 const normalizeBucketName = (name: string) => name.trim().toLowerCase();
 
@@ -298,6 +300,8 @@ export default function App() {
   const sidepanelToggleButtonRef = useRef<HTMLButtonElement>(null);
   const sidepanelLockButtonRef = useRef<HTMLButtonElement>(null);
   const boardFrameRef = useRef<HTMLDivElement>(null);
+  const boardDragPointerXRef = useRef<number | null>(null);
+  const boardAutoscrollFrameRef = useRef<number | null>(null);
   const bucketElementRefs = useRef<Record<string, HTMLElement | null>>({});
   const restoreConfirmRef = useRef<HTMLDivElement>(null);
   const uploadConfirmRef = useRef<HTMLDivElement>(null);
@@ -322,6 +326,32 @@ export default function App() {
   const sidepanelToggleTitle = isSidepanelOpen
     ? 'Click to collapse controls'
     : 'Click to open controls';
+
+  const cancelBoardEdgeAutoscroll = () => {
+    boardDragPointerXRef.current = null;
+    if (boardAutoscrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(boardAutoscrollFrameRef.current);
+      boardAutoscrollFrameRef.current = null;
+    }
+  };
+
+  const clearActiveDrag = () => {
+    setDraggedTaskId(null);
+    setDraggedTaskIds([]);
+    setDraggedBucketId(null);
+    setActiveBucketDropIndex(null);
+    cancelBoardEdgeAutoscroll();
+  };
+
+  const updateBoardDragPointer = (event: ReactDragEvent<HTMLElement>) => {
+    if (!draggedTaskId && !draggedBucketId) return;
+    boardDragPointerXRef.current = event.clientX;
+  };
+
+  const handleBoardDragLeave = (event: ReactDragEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    boardDragPointerXRef.current = null;
+  };
 
   const activeProject = useMemo(
     () => state.projects.find((project) => project.id === activeProjectId)
@@ -399,6 +429,7 @@ export default function App() {
       if (sidepanelOpenTimeoutRef.current !== null) {
         window.clearTimeout(sidepanelOpenTimeoutRef.current);
       }
+      cancelBoardEdgeAutoscroll();
     };
   }, []);
 
@@ -971,8 +1002,7 @@ export default function App() {
     bucketDropSettleTimeoutRef.current = window.setTimeout(() => {
       clearSettledBucketState();
     }, DROP_SETTLE_DURATION_MS);
-    setDraggedBucketId(null);
-    setActiveBucketDropIndex(null);
+    clearActiveDrag();
   };
 
   const deleteTask = (task: PlannerTask) => {
@@ -1369,8 +1399,7 @@ export default function App() {
   };
 
   const handleTaskDragEnd = () => {
-    setDraggedTaskId(null);
-    setDraggedTaskIds([]);
+    clearActiveDrag();
   };
 
   const moveTasksToBucket = (taskIds: string[], bucketId: string | null, targetIndex?: number) => {
@@ -1468,6 +1497,57 @@ export default function App() {
     if (!pendingUploadData) return;
     ensureScrollableTargetInView(sidepanelRef.current, uploadConfirmRef.current);
   }, [pendingUploadData]);
+
+  useEffect(() => {
+    if (!draggedTaskId && !draggedBucketId) {
+      cancelBoardEdgeAutoscroll();
+      return;
+    }
+
+    const step = () => {
+      const frame = boardFrameRef.current;
+      const pointerX = boardDragPointerXRef.current;
+
+      if (frame && pointerX !== null) {
+        const rect = frame.getBoundingClientRect();
+        const distanceFromLeft = pointerX - rect.left;
+        const distanceFromRight = rect.right - pointerX;
+        let scrollDelta = 0;
+
+        if (distanceFromLeft >= 0 && distanceFromLeft < BOARD_EDGE_AUTOSCROLL_ZONE_PX) {
+          const intensity = 1 - (distanceFromLeft / BOARD_EDGE_AUTOSCROLL_ZONE_PX);
+          scrollDelta = -Math.ceil(intensity * BOARD_EDGE_AUTOSCROLL_MAX_SPEED_PX);
+        } else if (distanceFromRight >= 0 && distanceFromRight < BOARD_EDGE_AUTOSCROLL_ZONE_PX) {
+          const intensity = 1 - (distanceFromRight / BOARD_EDGE_AUTOSCROLL_ZONE_PX);
+          scrollDelta = Math.ceil(intensity * BOARD_EDGE_AUTOSCROLL_MAX_SPEED_PX);
+        }
+
+        if (scrollDelta !== 0) {
+          frame.scrollLeft += scrollDelta;
+        }
+      }
+
+      boardAutoscrollFrameRef.current = window.requestAnimationFrame(step);
+    };
+
+    boardAutoscrollFrameRef.current = window.requestAnimationFrame(step);
+
+    const stopDrag = () => clearActiveDrag();
+    const stopDragOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') stopDrag();
+    };
+
+    window.addEventListener('dragend', stopDrag);
+    window.addEventListener('drop', stopDrag);
+    window.addEventListener('keydown', stopDragOnEscape);
+
+    return () => {
+      window.removeEventListener('dragend', stopDrag);
+      window.removeEventListener('drop', stopDrag);
+      window.removeEventListener('keydown', stopDragOnEscape);
+      cancelBoardEdgeAutoscroll();
+    };
+  }, [draggedBucketId, draggedTaskId]);
 
   useEffect(() => {
     if (!pendingBucketWarp || activeBuckets.length === 0) return;
@@ -1928,7 +2008,13 @@ export default function App() {
             onRestoreFileChange={restoreDataFromFile}
             onUploadFileChange={mergeDataFromFile}
           />
-          <div ref={boardFrameRef} className="board-frame">
+          <div
+            ref={boardFrameRef}
+            className="board-frame"
+            onDragEnterCapture={updateBoardDragPointer}
+            onDragOverCapture={updateBoardDragPointer}
+            onDragLeaveCapture={handleBoardDragLeave}
+          >
             <ProjectBoard project={activeProject}>
               <BucketColumn
                 columnIndex={0}
@@ -2023,8 +2109,7 @@ export default function App() {
                       setActiveBucketDropIndex(index);
                     }}
                     onBucketDragEnd={() => {
-                      setDraggedBucketId(null);
-                      setActiveBucketDropIndex(null);
+                      clearActiveDrag();
                     }}
                     onMoveBucketByOffset={moveBucketByOffset}
                     canMoveBucketLeft={index > 0}
