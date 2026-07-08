@@ -19,6 +19,7 @@ Planner data is stored in your browser localStorage.
 - Data stays on your machine unless you explicitly export and share JSON
 - Upload and restore are user-triggered actions only
 - Clipboard actions copy task text only when you trigger them
+- Local data is not encrypted by the app; do not store secrets, credentials, or sensitive private records in task text
 
 If you clear site storage, local data is removed. Use Export JSON for backups.
 
