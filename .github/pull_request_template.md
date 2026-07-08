@@ -1,17 +1,31 @@
 ## Summary
 
-Describe what changed and why.
+- 
+
+## Scope
+
+- [ ] Source/runtime behavior
+- [ ] Tests
+- [ ] Documentation
+- [ ] Public metadata
+- [ ] Dependencies
+- [ ] Workflows
 
 ## Validation
 
 - [ ] `npm run verify`
-- [ ] Manual UI checks completed
-- [ ] Data/export/clipboard behavior checked if affected
+- [ ] Manual UI checks completed, if UI changed
+- [ ] Import/export, clipboard, drag/drop, and responsive states checked if affected
 
-## Testing notes
+## Screenshots or recordings
 
-List any specific steps reviewers should run. Include sidepanel, drag/drop, copy, import/export, and responsive checks when relevant.
+Add screenshots or recordings for visible UI changes, or write `Not applicable`.
 
-## Screenshots / recordings (if UI changed)
+## Release and repository safety
 
-Attach before/after visuals when relevant.
+Confirm this PR does not unintentionally change:
+
+- [ ] Repository visibility, settings, rulesets, or branch protection
+- [ ] Tags, releases, or release metadata
+- [ ] Dependency versions or lockfiles outside the stated scope
+- [ ] Product behavior outside the stated scope
