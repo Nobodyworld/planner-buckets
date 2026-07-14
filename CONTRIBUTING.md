@@ -4,7 +4,7 @@ Thanks for helping improve Planner Buckets.
 
 ## Development setup
 
-1. Install Node.js 20.x, 22.x, or 24.x.
+1. Install Node.js 20.19 or newer within the Node 20 line, Node.js 22.12 or newer within the Node 22 line, or Node.js 24.x.
 2. Install dependencies:
 
 ```bash
