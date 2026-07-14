@@ -67,6 +67,7 @@ UX controls:
 
 - Sidepanel with manual show/hide and lock behavior
 - Board zoom controls with persistence
+- Horizontal edge autoscroll while dragging tasks or buckets on wide boards
 - Visual modes (Calm, Balanced, Energetic)
 - Light and dark themes
 
