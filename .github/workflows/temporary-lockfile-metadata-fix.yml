@@ -34,13 +34,18 @@ jobs:
 
           path = Path('package-lock.json')
           text = path.read_text(encoding='utf-8')
+          boundary = '    "node_modules/@adobe/css-tools": {'
           old = '        "node": ">=20.0.0 <25"'
           new = '        "node": "^20.19.0 || ^22.12.0 || ^24.0.0"'
 
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected exactly one old root engine entry, found {text.count(old)}')
+          if boundary not in text:
+              raise SystemExit('Could not locate the first dependency boundary')
 
-          path.write_text(text.replace(old, new), encoding='utf-8')
+          root, dependencies = text.split(boundary, 1)
+          if root.count(old) != 1:
+              raise SystemExit(f'Expected one old root engine entry, found {root.count(old)}')
+
+          path.write_text(root.replace(old, new) + boundary + dependencies, encoding='utf-8')
           PY
 
       - name: Confirm metadata-only diff
