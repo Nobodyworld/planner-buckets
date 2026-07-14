@@ -8,10 +8,13 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- Added structured bug report and feature request issue forms.
 - Added a pull request template with validation, screenshot, and release-safety prompts.
 
 ### Changed
 
+- Clarified that the original planning documents are historical design records and that current source, tests, and README documentation are authoritative.
+- Routed security reports to the private reporting guidance instead of allowing unstructured public security issues.
 - Clarified localStorage privacy notes in the README and security policy.
 
 ### Fixed
