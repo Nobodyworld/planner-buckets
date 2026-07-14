@@ -16,6 +16,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Fixed
 
+- Added horizontal board edge autoscroll for task and bucket drag interactions.
 - Cleaned up stale public-facing product naming in docs and the local start script.
 - Aligned contributor guidance with the current v2 reducer path and JSON export filename.
 - Aligned package metadata description with the public README positioning.
