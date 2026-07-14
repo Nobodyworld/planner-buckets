@@ -3,12 +3,19 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    throw "Node.js was not found. Install Node.js 20 or newer, then run this script again."
+    throw "Node.js was not found. Install Node.js 20.19+, 22.12+, or 24.x, then run this script again."
 }
 
 $nodeVersion = [Version]((node -v).TrimStart('v'))
-if ($nodeVersion.Major -lt 20 -or $nodeVersion.Major -ge 25) {
-    throw "Unsupported Node.js version $($nodeVersion.ToString()). Use Node.js 20, 22, or 24."
+$minimumVersions = @{
+    20 = [Version]"20.19.0"
+    22 = [Version]"22.12.0"
+    24 = [Version]"24.0.0"
+}
+$minimumVersion = $minimumVersions[$nodeVersion.Major]
+
+if ($null -eq $minimumVersion -or $nodeVersion -lt $minimumVersion) {
+    throw "Unsupported Node.js version $($nodeVersion.ToString()). Use Node.js 20.19+, 22.12+, or 24.x."
 }
 
 if (
