@@ -75,7 +75,7 @@ UX controls:
 
 Requirements:
 
-- Node.js 20, 22, or 24
+- Node.js 20.19+, 22.12+, or 24.x
 
 ```bash
 npm install
@@ -101,7 +101,7 @@ npm run verify
 npm run build
 ```
 
-`npm run verify` is the primary pre-PR validation gate used by CI.
+`npm run verify` is the primary pre-PR validation gate used by CI. CI runs on Node.js 20.19.0, the minimum supported Node 20 runtime.
 
 ## Architecture (v2)
 

@@ -13,12 +13,15 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Changed
 
+- Aligned the supported Node.js range, setup documentation, CI, and release workflow with the current Vite runtime minimums.
+- Added CI cancellation for superseded runs and timeouts for CI and release jobs.
 - Clarified that the original planning documents are historical design records and that current source, tests, and README documentation are authoritative.
 - Routed security reports to the private reporting guidance instead of allowing unstructured public security issues.
 - Clarified localStorage privacy notes in the README and security policy.
 
 ### Fixed
 
+- Updated the Windows startup and verification scripts to reject unsupported early Node 20/22 versions and unsupported odd-numbered major versions.
 - Added horizontal board edge autoscroll for task and bucket drag interactions.
 - Cleaned up stale public-facing product naming in docs and the local start script.
 - Aligned contributor guidance with the current v2 reducer path and JSON export filename.
