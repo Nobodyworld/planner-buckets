@@ -1,0 +1,86 @@
+name: Bug report
+description: Report a reproducible problem in Planner Buckets
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Planner Buckets stores data locally in the browser. Do not attach exported planner JSON unless you have reviewed and removed private information.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem summary
+      description: Describe what failed and the practical impact.
+      placeholder: A task disappears from the board after...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Tasks and task editing
+        - Buckets and drag-and-drop
+        - Projects
+        - Templates
+        - Search, selection, or clipboard
+        - Import, upload, restore, or export
+        - Archive or undo/redo
+        - Theme, visual mode, sidepanel, or zoom
+        - Local startup or build
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable sequence that reproduces the problem.
+      placeholder: |
+        1. Open a project with...
+        2. Drag...
+        3. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include operating system, browser and version, and Node.js version when relevant.
+      placeholder: Windows 11, Edge 150; Node.js 22.17.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or recordings
+      description: Paste relevant console output or attach visual evidence. Remove secrets and private planner data first.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed secrets, credentials, and private planner content from the report and attachments.
+          required: true
