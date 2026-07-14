@@ -29,45 +29,40 @@ jobs:
       - name: Align root package-lock engine metadata
         shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'package-lock.json';
+          const lockfile = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const expected = '>=20.0.0 <25';
+          const replacement = '^20.19.0 || ^22.12.0 || ^24.0.0';
+          const current = lockfile.packages?.['']?.engines?.node;
 
-          path = Path('package-lock.json')
-          text = path.read_text(encoding='utf-8')
-          boundary = '    "node_modules/@adobe/css-tools": {'
-          old = '        "node": ">=20.0.0 <25"'
-          new = '        "node": "^20.19.0 || ^22.12.0 || ^24.0.0"'
+          if (current !== expected) {
+            throw new Error(`Unexpected root engine metadata: ${JSON.stringify(current)}`);
+          }
 
-          if boundary not in text:
-              raise SystemExit('Could not locate the first dependency boundary')
-
-          root, dependencies = text.split(boundary, 1)
-          if root.count(old) != 1:
-              raise SystemExit(f'Expected one old root engine entry, found {root.count(old)}')
-
-          path.write_text(root.replace(old, new) + boundary + dependencies, encoding='utf-8')
-          PY
+          lockfile.packages[''].engines.node = replacement;
+          fs.writeFileSync(path, `${JSON.stringify(lockfile, null, 2)}\n`, 'utf8');
+          NODE
 
       - name: Confirm metadata-only diff
         shell: bash
         run: |
           test "$(git diff --name-only)" = "package-lock.json"
           git diff --unified=0 -- package-lock.json > /tmp/package-lock.diff
-          python - <<'PY'
-          from pathlib import Path
+          node <<'NODE'
+          const fs = require('node:fs');
+          const lines = fs.readFileSync('/tmp/package-lock.diff', 'utf8').split(/\r?\n/);
+          const removed = lines.filter((line) => line.startsWith('-') && !line.startsWith('---'));
+          const added = lines.filter((line) => line.startsWith('+') && !line.startsWith('+++'));
+          const expectedRemoved = ['-        "node": ">=20.0.0 <25"'];
+          const expectedAdded = ['+        "node": "^20.19.0 || ^22.12.0 || ^24.0.0"'];
 
-          lines = Path('/tmp/package-lock.diff').read_text(encoding='utf-8').splitlines()
-          removed = [line for line in lines if line.startswith('-') and not line.startswith('---')]
-          added = [line for line in lines if line.startswith('+') and not line.startswith('+++')]
-
-          expected_removed = ['-        "node": ">=20.0.0 <25"']
-          expected_added = ['+        "node": "^20.19.0 || ^22.12.0 || ^24.0.0"']
-
-          if removed != expected_removed or added != expected_added:
-              raise SystemExit(
-                  f'Unexpected lockfile diff. Removed={removed!r}; Added={added!r}'
-              )
-          PY
+          if (JSON.stringify(removed) !== JSON.stringify(expectedRemoved) ||
+              JSON.stringify(added) !== JSON.stringify(expectedAdded)) {
+            throw new Error(`Unexpected lockfile diff. Removed=${JSON.stringify(removed)} Added=${JSON.stringify(added)}`);
+          }
+          NODE
 
       - name: Install dependencies
         run: npm ci
