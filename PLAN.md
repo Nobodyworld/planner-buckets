@@ -1,5 +1,7 @@
 # Planner Buckets — Simple Build Plan
 
+> **Status: historical design record.** This file captures the original v1 planning baseline. The current application uses the implemented v2 architecture documented in `README.md` and under `src/`. Treat current source, tests, and user-facing documentation as authoritative when this plan differs.
+
 ## Intent
 
 Build a small, reliable planner that behaves like a common bucket/board layout without introducing accounts, servers, or workflow complexity before they are needed.
