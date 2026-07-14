@@ -1,0 +1,69 @@
+name: Feature request
+description: Propose a focused improvement to Planner Buckets
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the workflow problem first, then the proposed solution. Focused requests are easier to evaluate and implement safely.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Workflow problem
+      description: What is difficult, slow, error-prone, or impossible today?
+      placeholder: When managing a wide board, I cannot...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful change and how a user would interact with it.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      options:
+        - Tasks and task editing
+        - Buckets and board navigation
+        - Projects
+        - Templates
+        - Search, selection, or clipboard
+        - Import, restore, export, or backup
+        - Archive or undo/redo
+        - Theme, visual mode, sidepanel, or zoom
+        - Accessibility
+        - Developer experience or documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Note current workarounds or simpler alternatives.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Suggested acceptance criteria
+      description: List observable conditions that would make the request complete.
+      placeholder: |
+        - The user can...
+        - Existing exported data remains compatible.
+        - The behavior works in light and dark themes.
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Product constraints
+      options:
+        - label: This request can preserve the local-first, no-account default.
+        - label: I searched existing issues for the same or a closely related request.
+          required: true

@@ -1,1 +1,5 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Nobodyworld/planner-buckets/blob/main/SECURITY.md
+    about: Follow the private reporting instructions instead of opening a public issue.

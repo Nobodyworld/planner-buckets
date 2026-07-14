@@ -134,6 +134,8 @@ v2 notes:
 - `src/types/validators.ts`: structural and relational validation rules
 - `src/components/`: board and editor UI components
 
+`PLAN.md` and `PLAN_V2.md` are retained as historical design records. Current source, tests, and this README are authoritative when an older plan differs from the implementation.
+
 ## Release
 
 Current showcase baseline: `1.1.0`.
