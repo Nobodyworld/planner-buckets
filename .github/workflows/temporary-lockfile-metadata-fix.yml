@@ -29,40 +29,16 @@ jobs:
       - name: Align root package-lock engine metadata
         shell: bash
         run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = 'package-lock.json';
-          const lockfile = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const expected = '>=20.0.0 <25';
-          const replacement = '^20.19.0 || ^22.12.0 || ^24.0.0';
-          const current = lockfile.packages?.['']?.engines?.node;
-
-          if (current !== expected) {
-            throw new Error(`Unexpected root engine metadata: ${JSON.stringify(current)}`);
-          }
-
-          lockfile.packages[''].engines.node = replacement;
-          fs.writeFileSync(path, `${JSON.stringify(lockfile, null, 2)}\n`, 'utf8');
-          NODE
+          grep -q '"node": ">=20.0.0 <25"' package-lock.json
+          sed -i '0,/"node": ">=20.0.0 <25"/s//"node": "^20.19.0 || ^22.12.0 || ^24.0.0"/' package-lock.json
 
       - name: Confirm metadata-only diff
         shell: bash
         run: |
           test "$(git diff --name-only)" = "package-lock.json"
-          git diff --unified=0 -- package-lock.json > /tmp/package-lock.diff
-          node <<'NODE'
-          const fs = require('node:fs');
-          const lines = fs.readFileSync('/tmp/package-lock.diff', 'utf8').split(/\r?\n/);
-          const removed = lines.filter((line) => line.startsWith('-') && !line.startsWith('---'));
-          const added = lines.filter((line) => line.startsWith('+') && !line.startsWith('+++'));
-          const expectedRemoved = ['-        "node": ">=20.0.0 <25"'];
-          const expectedAdded = ['+        "node": "^20.19.0 || ^22.12.0 || ^24.0.0"'];
-
-          if (JSON.stringify(removed) !== JSON.stringify(expectedRemoved) ||
-              JSON.stringify(added) !== JSON.stringify(expectedAdded)) {
-            throw new Error(`Unexpected lockfile diff. Removed=${JSON.stringify(removed)} Added=${JSON.stringify(added)}`);
-          }
-          NODE
+          test "$(git diff --numstat -- package-lock.json)" = $'1\t1\tpackage-lock.json'
+          test "$(git diff --unified=0 -- package-lock.json | grep '^-' | grep -v '^---')" = '-        "node": ">=20.0.0 <25"'
+          test "$(git diff --unified=0 -- package-lock.json | grep '^+' | grep -v '^+++')" = '+        "node": "^20.19.0 || ^22.12.0 || ^24.0.0"'
 
       - name: Install dependencies
         run: npm ci
