@@ -4,6 +4,34 @@ Local-first planning board for projects, buckets, and tasks.
 
 Planner Buckets runs fully in your browser with no backend required, while still supporting practical workflows like templates, archived-task handling, import/export, and undo/redo.
 
+## Delivery modes
+
+Planner Buckets is keeping the existing browser application while adding an installable Windows desktop application.
+
+### Web application
+
+The current supported application runs through React and Vite.
+
+- No backend or account is required.
+- Planner data is stored in browser `localStorage`.
+- JSON export, upload, and restore provide data portability.
+- Local development uses the commands in [Web quick start](#web-quick-start).
+
+### Windows desktop application
+
+Desktop distribution is under active development in issues [#38](https://github.com/Nobodyworld/planner-buckets/issues/38) and [#39](https://github.com/Nobodyworld/planner-buckets/issues/39).
+
+The intended desktop application will:
+
+- install and launch without Node.js, a terminal, or the repository;
+- support normal Windows Start menu and taskbar behavior;
+- retain compatibility with the web planner schema and JSON backups;
+- store data separately from application binaries;
+- add durable file persistence and rotating backups through [#40](https://github.com/Nobodyworld/planner-buckets/issues/40);
+- add signed GitHub Release updates through [#41](https://github.com/Nobodyworld/planner-buckets/issues/41).
+
+See [Desktop distribution](docs/DESKTOP.md) for the architecture and data-safety contract. Until the desktop persistence work is complete, the web application and JSON export remain the supported usage and backup path.
+
 ## Why this exists
 
 Most lightweight planning apps are either too minimal for real work or too dependent on cloud setup. Planner Buckets is designed for people who want:
@@ -71,7 +99,7 @@ UX controls:
 - Visual modes (Calm, Balanced, Energetic)
 - Light and dark themes
 
-## Quick start
+## Web quick start
 
 Requirements:
 
@@ -84,12 +112,14 @@ npm run dev
 
 Then open <http://localhost:5173>.
 
-## Windows start script
+## Windows web-development start script
 
 Use either:
 
 - `start-local.cmd`
 - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1`
+
+These scripts start the web development server from a local checkout. They are not desktop installers and still require the repository and Node.js.
 
 ## Testing and quality
 
@@ -125,22 +155,27 @@ v2 notes:
 - Integrity validators enforce relational consistency across projects, buckets, tasks, and template definitions
 - Local storage uses versioned keys for safer recovery behavior
 
+The planned desktop architecture will place a runtime-selected persistence adapter between planner state and the storage implementation. The browser adapter will retain `localStorage`; the desktop adapter will use validated application-data files and backups.
+
 ## Repository map
 
 - `src/App.tsx`: primary composition, controls, and UI wiring
 - `src/state/plannerReducerV2.ts`: deterministic state transitions
-- `src/services/plannerPersistence.ts`: v1/v2 loading, migration, and persistence
+- `src/services/plannerPersistence.ts`: v1/v2 loading, migration, and browser persistence
 - `src/types/v2.ts`: v2 schema contracts
 - `src/types/validators.ts`: structural and relational validation rules
 - `src/components/`: board and editor UI components
+- `docs/DESKTOP.md`: desktop distribution, persistence, update, and validation contract
 
 `PLAN.md` and `PLAN_V2.md` are retained as historical design records. Current source, tests, and this README are authoritative when an older plan differs from the implementation.
 
 ## Release
 
-Current showcase baseline: `1.1.0`.
+Current stable web showcase baseline: `1.1.0`.
 
-Public release artifacts are managed through GitHub Releases.
+Public release artifacts are managed through GitHub Releases. Windows installer artifacts will be added only after the desktop shell, durable persistence, and signed update path meet their tracked acceptance criteria.
+
+The exact pre-desktop source baseline is preserved on `archive/web-v1.1.0-baseline-2026-07-14` at commit `61dc19147c3a82c27ecfa2796854376a409835d9`.
 
 ## License
 
