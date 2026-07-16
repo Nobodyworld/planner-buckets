@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "No frontend Tauri APIs are exposed by the shell.",
+  "windows": [
+    "main"
+  ],
+  "permissions": []
+}

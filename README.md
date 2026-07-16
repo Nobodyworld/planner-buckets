@@ -19,18 +19,15 @@ The current supported application runs through React and Vite.
 
 ### Windows desktop application
 
-Desktop distribution is under active development in issues [#38](https://github.com/Nobodyworld/planner-buckets/issues/38) and [#39](https://github.com/Nobodyworld/planner-buckets/issues/39).
+The Windows desktop shell is implemented in [#39](https://github.com/Nobodyworld/planner-buckets/issues/39) alongside the browser application. It wraps the same React/Vite frontend in Tauri 2 and builds an NSIS installer.
 
-The intended desktop application will:
+- Its NSIS configuration targets normal current-user Windows installation and Start menu behavior.
+- It keeps the existing planner schema and JSON interchange format unchanged.
+- It is transitional: desktop data currently lives in that app's WebView `localStorage`.
+- Durable application-data files and automatic backups are scoped to [#40](https://github.com/Nobodyworld/planner-buckets/issues/40).
+- Signed updates and release publishing are scoped to [#41](https://github.com/Nobodyworld/planner-buckets/issues/41).
 
-- install and launch without Node.js, a terminal, or the repository;
-- support normal Windows Start menu and taskbar behavior;
-- retain compatibility with the web planner schema and JSON backups;
-- store data separately from application binaries;
-- add durable file persistence and rotating backups through [#40](https://github.com/Nobodyworld/planner-buckets/issues/40);
-- add signed GitHub Release updates through [#41](https://github.com/Nobodyworld/planner-buckets/issues/41).
-
-See [Desktop distribution](docs/DESKTOP.md) for the architecture and data-safety contract. Until the desktop persistence work is complete, the web application and JSON export remain the supported usage and backup path.
+Continue exporting JSON backups. To migrate data from the browser, choose **Export All Data** in the browser application, then **Restore** that JSON in the desktop application. See [Desktop distribution](docs/DESKTOP.md) for prerequisites, installation, and current limitations.
 
 ## Why this exists
 
@@ -133,6 +130,19 @@ npm run build
 
 `npm run verify` is the primary pre-PR validation gate used by CI. CI runs on Node.js 20.19.0, the minimum supported Node 20 runtime.
 
+## Desktop development and installation
+
+The Windows shell supports Windows 10 version 1803 or later and Windows 11 when Microsoft Edge WebView2 is available. Building it requires Node.js 20.19+, 22.12+, or 24.x, Rust stable with the `x86_64-pc-windows-msvc` host, and Microsoft C++ Build Tools with **Desktop development with C++** installed.
+
+```bash
+npm run desktop:dev
+npm run desktop:build
+```
+
+`npm run dev` remains the browser development command, and `npm run build` remains the browser production build. The desktop build produces an NSIS installer under `src-tauri\\target\\release\\bundle\\nsis\\`; that generated output is not committed. The current-user installer configuration is designed to add a normal Start menu entry and use standard Windows pinning and uninstall controls; verify those behaviors through a local installation test before release.
+
+The desktop shell does not yet provide durable file storage, automatic backups, or signed updates. Keep exporting JSON backups and do not treat WebView `localStorage` as data-loss protection.
+
 ## Architecture (v2)
 
 The app now runs on a v2 data model (`PlannerDataV2`) with explicit entities for projects, buckets, tasks, templates, and template definitions.
@@ -155,7 +165,7 @@ v2 notes:
 - Integrity validators enforce relational consistency across projects, buckets, tasks, and template definitions
 - Local storage uses versioned keys for safer recovery behavior
 
-The planned desktop architecture will place a runtime-selected persistence adapter between planner state and the storage implementation. The browser adapter will retain `localStorage`; the desktop adapter will use validated application-data files and backups.
+The desktop shell currently retains the browser persistence implementation in its WebView. A runtime-selected desktop persistence adapter with validated application-data files and backups is intentionally deferred to issue #40.
 
 ## Repository map
 

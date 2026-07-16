@@ -1,177 +1,101 @@
 # Desktop distribution
 
-Planner Buckets supports a browser-first local workflow today. The desktop workstream adds an installable Windows application without removing or weakening the web build.
+Planner Buckets supports two parallel delivery modes that share the same React/Vite frontend and planner schema:
 
-This document is the implementation contract for issues #38 and #39. Durable persistence and automatic backups are tracked in #40. Signed updates and release automation are tracked in #41.
+- the existing browser application; and
+- a Windows desktop shell built with Tauri 2.
 
-## Supported delivery modes
+This document records the implemented shell in issue #39. It does not expand the scope of durable persistence in #40 or signed updates and release publishing in #41.
 
-### Web
+## Current Windows support and prerequisites
 
-The existing React/Vite application remains supported.
+The desktop shell is intended for Windows 10 version 1803 or later and Windows 11. Microsoft Edge WebView2 is included with those supported Windows versions; install the Evergreen WebView2 Runtime if it is absent.
 
-- Development entrypoint: `npm run dev`
-- Production build: `npm run build`
-- Planner data remains in browser `localStorage`.
-- JSON export, merge, and restore remain the portability and backup interface.
-- Clearing browser site storage can delete planner data, so users must export backups.
+Building from a checkout requires:
 
-### Desktop
+- Node.js `^20.19.0 || ^22.12.0 || ^24.0.0`;
+- Rust stable with the `x86_64-pc-windows-msvc` host;
+- Microsoft C++ Build Tools with the **Desktop development with C++** workload; and
+- WebView2.
 
-The desktop application will use Tauri 2 around the existing React/Vite frontend.
+The Tauri shell uses `@tauri-apps/cli` `2.11.4`, Rust `tauri` `2.11.5`, and `tauri-build` `2.6.3`. No Tauri frontend API package or Tauri plugin is used.
 
-- It must install and launch without Node.js, a terminal, or the repository.
-- It must use normal Windows Start menu and taskbar behavior.
-- It must use the same planner schema, validation rules, reducer behavior, and JSON interchange format as the web build.
-- Application binaries and user data must be stored separately.
-- Desktop file storage will become authoritative only inside the desktop runtime.
-- The desktop shell must not silently fall back to browser `localStorage` when file persistence fails.
-
-## Architecture boundary
-
-The React UI must not directly decide where planner data is stored. Introduce a storage adapter selected at runtime.
+## Development and build commands
 
 ```text
-React UI and planner state
-        |
-        v
-Planner persistence contract
-        |
-        +-- Web adapter: localStorage
-        |
-        +-- Desktop adapter: Tauri commands and application-data files
+npm run dev             # browser development server at http://localhost:5173
+npm run build           # browser production build
+npm run desktop:dev     # Tauri window using the Vite development server
+npm run desktop:build   # production Windows NSIS installer
 ```
 
-The contract should support at least:
+`npm run dev` remains the browser application. Tauri uses that command only as its desktop development server and does not create a second frontend.
 
-- loading validated planner data;
-- saving validated planner data;
-- describing the active storage mode;
-- reporting the current data and backup locations when available;
-- creating an explicit recovery snapshot;
-- listing or resolving recoverable backups when available;
-- returning actionable warnings without discarding the last valid data.
+The configured main window is titled **Planner Buckets**, is resizable, starts at 1440 × 900, and has a 960 × 640 minimum size. Its application identifier is `com.nobodyworld.plannerbuckets`.
 
-Keep schema validation in TypeScript as the shared domain boundary. Rust-side commands must still protect file operations and must not trust arbitrary paths supplied by the frontend.
+On Windows, native Tauri file-drop interception is disabled for the main window so the planner's existing HTML5 task and bucket drag-and-drop interactions continue to reach the frontend.
 
-## Desktop data locations
+## Installer behavior
 
-Resolve locations through Tauri runtime path APIs. Do not hard-code usernames, repository paths, or installation paths.
-
-Expected Windows shape:
+`npm run desktop:build` creates an NSIS installer under:
 
 ```text
-%LOCALAPPDATA%\Planner Buckets\data\planner-v2.json
-%LOCALAPPDATA%\Planner Buckets\backups\
+src-tauri\target\release\bundle\nsis\
 ```
 
-The exact resolved path may vary by Tauri application identifier and platform conventions.
+The configured current-user installer does not require elevated installation and is intended to install outside the Git checkout. It is configured for the normal NSIS Start menu, launch, pinning, and uninstall behavior. Validate those user-facing behaviors through the local installation test before release.
 
-Data must never be stored under:
+`dist/`, `src-tauri/target/`, installers, and exported planner JSON are generated user or build artifacts and are not committed.
 
-- the installed executable directory;
-- the Git checkout;
-- `node_modules`;
-- a temporary build directory;
-- a release extraction directory.
+## Data and migration limitation
 
-## Data safety contract
+The desktop shell is transitional. It currently uses the desktop WebView's `localStorage`; it does not yet use an application-data file, automatic backups, or recovery snapshots. The main WebView is configured with an application-data-relative data directory so its browser storage is not tied to the install directory. It is still not a data-loss guarantee.
 
-The desktop persistence implementation in #40 must satisfy these rules:
+Continue exporting JSON backups. Browser-to-desktop migration is explicit:
 
-1. Validate before saving.
-2. Write to a temporary file in the destination filesystem.
-3. Flush and close the temporary file before replacement.
-4. Preserve or recover the previous valid file if replacement fails.
-5. Preserve source data before migration.
-6. Create a snapshot before restore and update operations.
-7. Use bounded backup retention.
-8. Surface failures in the UI; never claim data was saved when it was not.
-9. Keep JSON export available as a user-controlled external backup.
+1. In the browser application, choose **Export All Data**.
+2. Open the desktop application.
+3. Choose **Restore** and select that JSON file.
 
-The initial retention target is 30 daily snapshots plus a bounded set of recent operation snapshots. Final constants and tests belong in #40.
+The same flow can move validated planner data back to the browser. No browser profile is read directly by the desktop shell.
 
-## Browser-to-desktop migration
+## Security boundaries
 
-The first desktop release does not need to read another browser profile directly.
+The packaged shell loads only its local frontend. Development uses `http://localhost:5173` and its local Vite WebSocket for hot reload. The CSP allows only these local development connections plus local packaged assets; it allows inline styles because the existing React frontend uses them. The shell exposes no global Tauri JavaScript object and grants its main window no frontend Tauri API permissions.
 
-Supported migration flow:
+It does not request filesystem, shell, process, broad network, clipboard, dialog, updater, or user-selected-path access. It contains no persistence commands.
 
-1. Open the current web application.
-2. Export **All data** as JSON.
-3. Install and launch the desktop application.
-4. Restore the exported JSON.
-5. Confirm the desktop storage status and create an external backup.
+## Scope split
 
-The desktop app must accept the same validated v2 JSON used by the web application. Existing v1 migration behavior must remain deterministic and tested.
+### #39 — Tauri shell and Windows installer
 
-## Desktop shell scope for #39
+- Tauri 2 project, NSIS installer configuration, icons, and constrained capability setup.
+- Browser and desktop development/build commands.
+- Windows CI compilation and local installer validation.
+- Transitional WebView `localStorage` disclosure and JSON migration instructions.
 
-The first desktop PR should include:
+### #40 — durable persistence and backups
 
-- Tauri 2 project files under `src-tauri/`;
-- explicit desktop development and build scripts;
-- Windows application identity and window configuration;
-- application icons generated from an approved source image;
-- NSIS installer output;
-- a capability/permission configuration limited to required behavior;
-- documentation of Windows prerequisites and commands;
-- CI-compatible source configuration without committing secrets;
-- tests or build checks that prove the browser build remains intact.
+- Validated application-data files, backup retention, recovery snapshots, and desktop data-location reporting.
+- Any persistence adapter changes or frontend/Rust persistence commands.
 
-The first shell PR may temporarily use the existing localStorage adapter while the desktop file adapter is developed in #40, but it must clearly label that state as transitional and must not claim durable desktop storage is complete.
+### #41 — signed updater and releases
 
-## Release and update boundary
+- Signing keys, updater configuration, tagged release publishing, and automatic update delivery.
 
-Issue #41 will add tagged GitHub Release automation and signed updates. The shell work must leave room for it but must not commit private updater keys.
+## Validation
 
-Required later behavior:
-
-- build Windows installers on a supported Windows GitHub-hosted runner;
-- publish installer and signed updater artifacts for version tags;
-- pin all GitHub Actions to full-length commit SHAs;
-- use least-privilege workflow permissions;
-- require explicit user approval before restart and installation;
-- create a successful pre-update data backup before applying an update;
-- keep package, Tauri, installer, and release versions aligned.
-
-## Public repository rules
-
-Because the repository is public and will remain public:
-
-- do not commit signing keys, tokens, local machine paths, personal data, or exported planner data;
-- do not include private operational rationale in issues, commits, PRs, workflows, or release notes;
-- keep generated build output and installer artifacts out of Git history;
-- publish generated installers through GitHub Releases;
-- document security-sensitive setup using secret names and procedures, never secret values.
-
-## Validation gates
-
-Before #39 is ready to merge, record the exact results of:
+Run the browser checks and the Rust shell checks before submitting desktop changes:
 
 ```text
 npm ci
 npm test
 npm run build
 npm run verify
-npm run desktop:dev
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+cargo test --manifest-path src-tauri/Cargo.toml
 npm run desktop:build
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
 ```
 
-Command names may be adjusted to match the implemented scripts, but browser tests/builds and Rust/Tauri checks must all be represented.
-
-A local Windows installer launch test is required before calling the shell complete. GitHub Actions validation alone does not prove Start menu installation, taskbar pinning behavior, WebView startup, or upgrade behavior.
-
-## Baseline and rollback reference
-
-The pre-desktop public web baseline is preserved at:
-
-```text
-branch: archive/web-v1.1.0-baseline-2026-07-14
-commit: 61dc19147c3a82c27ecfa2796854376a409835d9
-```
-
-This branch is a source reference, not a substitute for user-data backups.
+Also perform local Windows smoke tests for `npm run desktop:dev`, the generated installer, and the independent browser command. Record only tests that were genuinely completed.
