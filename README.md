@@ -19,13 +19,13 @@ The current supported application runs through React and Vite.
 
 ### Windows desktop application
 
-The Windows desktop shell is implemented in [#39](https://github.com/Nobodyworld/planner-buckets/issues/39) alongside the browser application. It wraps the same React/Vite frontend in Tauri 2 and builds an NSIS installer.
+The Windows desktop shell is implemented in [#39](https://github.com/Nobodyworld/app-planner-buckets/issues/39) alongside the browser application. It wraps the same React/Vite frontend in Tauri 2 and builds an NSIS installer.
 
 - Its NSIS configuration targets normal current-user Windows installation and Start menu behavior.
 - It keeps the existing planner schema and JSON interchange format unchanged.
 - It is transitional: desktop data currently lives in that app's WebView `localStorage`.
-- Durable application-data files and automatic backups are scoped to [#40](https://github.com/Nobodyworld/planner-buckets/issues/40).
-- Signed updates and release publishing are scoped to [#41](https://github.com/Nobodyworld/planner-buckets/issues/41).
+- Durable application-data files and automatic backups are scoped to [#40](https://github.com/Nobodyworld/app-planner-buckets/issues/40).
+- Signed updates and release publishing are scoped to [#41](https://github.com/Nobodyworld/app-planner-buckets/issues/41).
 
 Continue exporting JSON backups. To migrate data from the browser, choose **Export All Data** in the browser application, then **Restore** that JSON in the desktop application. See [Desktop distribution](docs/DESKTOP.md) for prerequisites, installation, and current limitations.
 
