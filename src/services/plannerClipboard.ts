@@ -1,4 +1,6 @@
 import type { PlannerTask } from '../types';
+import { isTauri } from '@tauri-apps/api/core';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
 // Pure utility functions for task formatting (no side effects)
 
@@ -68,6 +70,11 @@ export const formatTaskForSingleCopy = (task: PlannerTask, bucketName: string): 
  * Throws if both methods fail.
  */
 export const copyTextToClipboard = async (text: string): Promise<void> => {
+    if (isTauri()) {
+        await writeText(text);
+        return;
+    }
+
     try {
         if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(text);
@@ -84,10 +91,14 @@ export const copyTextToClipboard = async (text: string): Promise<void> => {
     textArea.style.left = '-9999px';
     textArea.style.top = '0';
     document.body.appendChild(textArea);
-    textArea.select();
 
-    const copied = document.execCommand('copy');
-    document.body.removeChild(textArea);
+    let copied = false;
+    try {
+        textArea.select();
+        copied = document.execCommand('copy');
+    } finally {
+        textArea.remove();
+    }
 
     if (!copied) {
         throw new Error('Clipboard copy failed');

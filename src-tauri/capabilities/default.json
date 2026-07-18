@@ -1,9 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "No frontend Tauri APIs are exposed by the shell.",
+  "description": "The main window can write plain text to the system clipboard.",
   "windows": [
     "main"
   ],
-  "permissions": []
+  "permissions": [
+    "clipboard-manager:allow-write-text"
+  ]
 }

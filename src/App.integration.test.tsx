@@ -594,6 +594,26 @@ describe('App integration', () => {
         expect(writeText).toHaveBeenCalledWith('[ ] Write launch summary\nBucket: To Do\nNote: Include blockers');
     });
 
+    it('shows failure without a false success status when clipboard writing rejects', async () => {
+        const writeText = vi.fn().mockRejectedValue(new Error('clipboard unavailable'));
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText },
+            configurable: true,
+        });
+        Object.defineProperty(document, 'execCommand', {
+            value: vi.fn(() => false),
+            configurable: true,
+        });
+
+        render(<App />);
+        fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+
+        await waitFor(() => {
+            expect(screen.getByText(/Could not copy task/)).toBeInTheDocument();
+        });
+        expect(screen.queryByText(/Copied "Write launch summary"/)).not.toBeInTheDocument();
+    });
+
     it('copies all tasks in a bucket as an ordered checklist', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, 'clipboard', {
@@ -778,7 +798,8 @@ describe('App integration', () => {
         const taskCard = screen.getByRole('button', { name: 'Overflow task' }).closest('.task-card') as HTMLElement;
         const dataTransfer = createDragDataTransfer();
 
-        fireEvent.dragStart(taskCard, { dataTransfer });
+        const taskDragHandle = taskCard.querySelector('.drag-handle') as HTMLElement;
+        fireEvent.dragStart(taskDragHandle, { dataTransfer });
         await waitFor(() => expect(taskCard).toHaveClass('is-dragging'));
         fireBoardDragOver(frame, 592, dataTransfer);
 

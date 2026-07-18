@@ -1445,7 +1445,7 @@ select:focus {
   padding: calc(12px / var(--density-scale));
   background: var(--surface);
   box-shadow: 0 2px 8px rgba(25, 39, 68, 0.08);
-  cursor: grab;
+  cursor: default;
   transition:
     transform var(--motion-fast) var(--ease-standard),
     box-shadow var(--hover-glow-out) var(--ease-standard),
@@ -1522,10 +1522,6 @@ select:focus {
   filter: blur(0.2px) saturate(1.2);
 }
 
-.task-card:active {
-  cursor: grabbing;
-}
-
 .task-card.is-dragging,
 .task-card.is-dragging * {
   cursor: grabbing !important;
@@ -1579,6 +1575,8 @@ select:focus {
   font-size: 0.87rem;
   line-height: 1.45;
   white-space: pre-wrap;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .task-meta {
