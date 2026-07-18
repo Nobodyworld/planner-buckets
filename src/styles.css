@@ -235,6 +235,18 @@ body {
   overflow: hidden;
 }
 
+.app-shell {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app-shell input,
+.app-shell textarea,
+.app-shell [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 button,
 input,
 textarea,
@@ -1575,8 +1587,6 @@ select:focus {
   font-size: 0.87rem;
   line-height: 1.45;
   white-space: pre-wrap;
-  -webkit-user-select: text;
-  user-select: text;
 }
 
 .task-meta {
