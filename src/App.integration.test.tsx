@@ -960,6 +960,9 @@ describe('App integration', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
 
+        expect(screen.getByRole('status')).toHaveTextContent(
+            /Export started — check your default Downloads folder for bsp-planner-\d{4}-\d{2}-\d{2}\.json\./,
+        );
         expect(createObjectUrl).toHaveBeenCalledTimes(1);
         expect(exportedBlob).not.toBeNull();
         const exported = JSON.parse(await exportedBlob!.text()) as PlannerDataV2;

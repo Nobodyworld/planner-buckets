@@ -254,6 +254,7 @@ export default function App() {
   const [hideRestoreUndoCard, setHideRestoreUndoCard] = useState(false);
   const [isRestoreUndoClosing, setIsRestoreUndoClosing] = useState(false);
   const [dataActionMessage, setDataActionMessage] = useState<string | null>(initialLoadResult.warning);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [templateMessage, setTemplateMessage] = useState<string | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showSearchStatus, setShowSearchStatus] = useState(false);
@@ -388,6 +389,16 @@ export default function App() {
       setStatus('Could not save locally');
     }
   }, [state]);
+
+  useEffect(() => {
+    if (!exportNotice) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setExportNotice(null);
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [exportNotice]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -1117,8 +1128,25 @@ export default function App() {
     const link = document.createElement('a');
     link.href = url;
     link.download = `bsp-planner-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    link.style.display = 'none';
+    document.body.appendChild(link);
+
+    try {
+      link.click();
+      setDataActionMessage(null);
+      setExportNotice(`Export started — check your default Downloads folder for ${link.download}.`);
+    } catch {
+      setExportNotice(null);
+      link.remove();
+      URL.revokeObjectURL(url);
+      setDataActionMessage('Export could not be started.');
+      return;
+    }
+
+    window.setTimeout(() => {
+      link.remove();
+      URL.revokeObjectURL(url);
+    }, 1000);
   };
 
   const readPlannerDataFromFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1749,6 +1777,26 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      {exportNotice && (
+        <div
+          className="app-notification-banner"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <span>{exportNotice}</span>
+          <button
+            type="button"
+            className="icon-button app-notification-dismiss"
+            onClick={() => setExportNotice(null)}
+            aria-label="Dismiss export notification"
+            title="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <header className="app-header">
         <div className="brand-block">
           <span className="brand-icon" aria-hidden="true">{APP_ICON_TEXT}</span>

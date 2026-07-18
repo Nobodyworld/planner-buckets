@@ -3176,3 +3176,31 @@ h1 {
   margin: 6px 0 0;
   padding-left: 18px;
 }
+.app-notification-banner {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px 10px 14px;
+  border: 1px solid color-mix(in oklab, var(--success) 38%, var(--border));
+  border-radius: 12px;
+  color: var(--text);
+  background: color-mix(in oklab, var(--surface) 92%, var(--success) 8%);
+  box-shadow: var(--shadow-strong);
+  transform: translateX(-50%);
+  animation: interaction-enter var(--anim-enter) var(--ease-standard) both;
+}
+
+.app-notification-banner span {
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.app-notification-dismiss {
+  flex: 0 0 auto;
+}
