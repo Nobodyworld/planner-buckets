@@ -804,7 +804,6 @@ describe('App integration', () => {
         fireBoardDragOver(frame, 592, dataTransfer);
 
         await waitFor(() => expect(animationFrameCallbacks.length).toBeGreaterThan(0));
-
         act(() => {
             animationFrameCallbacks.shift()?.(16);
         });
@@ -823,14 +822,16 @@ describe('App integration', () => {
         const frame = container.querySelector('.board-frame') as HTMLElement;
         mockBoardFrameGeometry(frame);
 
-        const bucketDragHandle = screen.getAllByRole('button', { name: 'Drag to move bucket' })[0];
+        const bucketDragHandle = screen.getAllByRole('img', { name: 'Drag to move bucket' })[0];
         const dataTransfer = createDragDataTransfer();
 
         fireEvent.dragStart(bucketDragHandle, { dataTransfer });
         await waitFor(() => expect(container.querySelector('.bucket-drop-slot.visible')).not.toBeNull());
+        expect(bucketDragHandle.closest('.bucket-column')).toHaveClass('bucket-drag-source');
         fireBoardDragOver(frame, 592, dataTransfer);
 
         await waitFor(() => expect(animationFrameCallbacks.length).toBeGreaterThan(0));
+        expect(container.querySelector('.bucket-drop-slot.active')).not.toBeNull();
 
         act(() => {
             animationFrameCallbacks.shift()?.(16);
@@ -839,6 +840,9 @@ describe('App integration', () => {
         expect(frame.scrollLeft).toBeGreaterThan(0);
 
         fireEvent.dragEnd(bucketDragHandle);
+        await waitFor(() => expect(container.querySelector('.bucket-drop-slot.visible')).toBeNull());
+        expect(bucketDragHandle.closest('.bucket-column')).not.toHaveClass('bucket-drag-source');
+        expect(document.querySelector('.bucket-drag-preview')).not.toBeInTheDocument();
     });
 
     it('starts an empty browser storage with the v1 default board buckets', async () => {

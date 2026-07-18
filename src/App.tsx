@@ -337,6 +337,7 @@ export default function App() {
   };
 
   const clearActiveDrag = () => {
+    document.querySelectorAll('.bucket-drag-preview').forEach((preview) => preview.remove());
     setDraggedTaskId(null);
     setDraggedTaskIds([]);
     setDraggedBucketId(null);
@@ -2126,6 +2127,7 @@ export default function App() {
                     tasks={filteredTasksByBucket.get(bucket.id) ?? []}
                     draggedTaskId={draggedTaskId}
                     isBucketDragActive={Boolean(draggedBucketId)}
+                    isBucketDragSource={draggedBucketId === bucket.id}
                     nudgeFromLeftGap={Boolean(draggedBucketId) && activeBucketDropIndex === index}
                     nudgeFromRightGap={Boolean(draggedBucketId) && activeBucketDropIndex === index + 1}
                     isBucketDropSettled={settledBucketId === bucket.id}

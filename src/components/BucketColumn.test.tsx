@@ -15,9 +15,10 @@ const makeBucket = (pinned = false): BucketV2 => ({
     updatedAt: '2026-07-18T00:00:00.000Z',
 });
 
-const renderBucket = (bucket: BucketV2, isWarpHighlight = false) => {
+const renderBucket = (bucket: BucketV2, isWarpHighlight = false, isBucketDragSource = false) => {
     const onBucketDragStart = vi.fn();
-    render(
+    const onBucketDragEnd = vi.fn();
+    const result = render(
         <BucketColumn
             columnIndex={11}
             bucket={bucket}
@@ -26,6 +27,7 @@ const renderBucket = (bucket: BucketV2, isWarpHighlight = false) => {
             draggedAccentIndex={null}
             highlightedTaskId={null}
             isWarpHighlight={isWarpHighlight}
+            isBucketDragSource={isBucketDragSource}
             onQuickAddTask={vi.fn()}
             onEditTask={vi.fn()}
             onDeleteTask={vi.fn()}
@@ -35,33 +37,77 @@ const renderBucket = (bucket: BucketV2, isWarpHighlight = false) => {
             onDragStart={vi.fn()}
             onDragEnd={vi.fn()}
             onBucketDragStart={onBucketDragStart}
+            onBucketDragEnd={onBucketDragEnd}
         />
     );
-    return onBucketDragStart;
+    return { ...result, onBucketDragStart, onBucketDragEnd };
 };
+
+const createDataTransfer = () => ({
+    setData: vi.fn(),
+    setDragImage: vi.fn(),
+    effectAllowed: 'none',
+});
 
 describe('BucketColumn drag handle', () => {
     it.each([false, true])('renders an enabled draggable handle when pinned is %s', (pinned) => {
         renderBucket(makeBucket(pinned));
-        expect(screen.getByRole('button', { name: 'Drag to move bucket' })).toHaveAttribute('draggable', 'true');
-        expect(screen.getByRole('button', { name: 'Drag to move bucket' })).not.toBeDisabled();
+        const handle = screen.getByRole('img', { name: 'Drag to move bucket' });
+        expect(handle).toHaveAttribute('draggable', 'true');
+        expect(handle.tagName).toBe('SPAN');
     });
 
     it('keeps a newly highlighted bucket draggable at a high stagger index', () => {
-        const onBucketDragStart = renderBucket(makeBucket(), true);
-        const handle = screen.getByRole('button', { name: 'Drag to move bucket' });
+        const { onBucketDragStart } = renderBucket(makeBucket(), true);
+        const handle = screen.getByRole('img', { name: 'Drag to move bucket' });
+        const dataTransfer = createDataTransfer();
 
         expect(handle.closest('.bucket-column')).toHaveClass('warp-highlight', 'column-stagger-11');
-        fireEvent.dragStart(handle, { dataTransfer: { setData: vi.fn(), effectAllowed: 'none' } });
+        fireEvent.dragStart(handle, { dataTransfer });
+        expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'bucket-new');
+        expect(dataTransfer.effectAllowed).toBe('move');
+        expect(dataTransfer.setDragImage).toHaveBeenCalledWith(expect.any(HTMLElement), 28, 22);
         expect(onBucketDragStart).toHaveBeenCalledWith('bucket-new');
+    });
+
+    it('creates a named translucent preview and removes it on drag end', () => {
+        const { onBucketDragEnd } = renderBucket(makeBucket());
+        const handle = screen.getByRole('img', { name: 'Drag to move bucket' });
+
+        fireEvent.dragStart(handle, { dataTransfer: createDataTransfer() });
+        expect(document.querySelector('.bucket-drag-preview')).toHaveTextContent('New bucket');
+
+        fireEvent.dragEnd(handle);
+        expect(document.querySelector('.bucket-drag-preview')).not.toBeInTheDocument();
+        expect(onBucketDragEnd).toHaveBeenCalledOnce();
+    });
+
+    it('removes the preview on failed drag setup and component cleanup', () => {
+        const { unmount } = renderBucket(makeBucket());
+        const handle = screen.getByRole('img', { name: 'Drag to move bucket' });
+        const failedTransfer = createDataTransfer();
+        failedTransfer.setDragImage.mockImplementation(() => { throw new Error('drag image failed'); });
+
+        fireEvent.dragStart(handle, { dataTransfer: failedTransfer });
+        expect(document.querySelector('.bucket-drag-preview')).not.toBeInTheDocument();
+        expect(failedTransfer.setData).toHaveBeenCalledWith('text/plain', 'bucket-new');
+
+        fireEvent.dragStart(handle, { dataTransfer: createDataTransfer() });
+        unmount();
+        expect(document.querySelector('.bucket-drag-preview')).not.toBeInTheDocument();
+    });
+
+    it('marks only the active bucket as the drag source', () => {
+        renderBucket(makeBucket(), false, true);
+        expect(screen.getByRole('img', { name: 'Drag to move bucket' }).closest('.bucket-column')).toHaveClass('bucket-drag-source');
     });
 
     it('does not remove drag functionality when reduced motion is requested', () => {
         vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
-        const onBucketDragStart = renderBucket(makeBucket());
-        const handle = screen.getByRole('button', { name: 'Drag to move bucket' });
+        const { onBucketDragStart } = renderBucket(makeBucket());
+        const handle = screen.getByRole('img', { name: 'Drag to move bucket' });
 
-        fireEvent.dragStart(handle, { dataTransfer: { setData: vi.fn(), effectAllowed: 'none' } });
+        fireEvent.dragStart(handle, { dataTransfer: createDataTransfer() });
         expect(handle).toHaveAttribute('draggable', 'true');
         expect(onBucketDragStart).toHaveBeenCalledOnce();
         vi.unstubAllGlobals();

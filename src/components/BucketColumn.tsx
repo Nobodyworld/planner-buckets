@@ -8,6 +8,7 @@ interface BucketColumnProps {
     tasks: PlannerTask[];
     draggedTaskId: string | null;
     isBucketDragActive?: boolean;
+    isBucketDragSource?: boolean;
     nudgeFromLeftGap?: boolean;
     nudgeFromRightGap?: boolean;
     isBucketDropSettled?: boolean;
@@ -58,6 +59,7 @@ export function BucketColumn({
     tasks,
     draggedTaskId,
     isBucketDragActive = false,
+    isBucketDragSource = false,
     nudgeFromLeftGap = false,
     nudgeFromRightGap = false,
     isBucketDropSettled = false,
@@ -101,6 +103,7 @@ export function BucketColumn({
     const [isInlineTaskEntryOpen, setIsInlineTaskEntryOpen] = useState(false);
     const settleTimeoutRef = useRef<number | null>(null);
     const inlineTaskInputRef = useRef<HTMLInputElement>(null);
+    const bucketDragPreviewRef = useRef<HTMLElement | null>(null);
     const bucketId = bucket?.id ?? null;
     const bucketLabel = bucket?.name ?? 'Unassigned';
     const accentIndex = accentIndexFromBucket(bucketId);
@@ -120,11 +123,42 @@ export function BucketColumn({
         setActiveDropIndex(null);
     }, [isBucketDragActive]);
 
+    const removeBucketDragPreview = () => {
+        bucketDragPreviewRef.current?.remove();
+        bucketDragPreviewRef.current = null;
+    };
+
     useEffect(() => () => {
         if (settleTimeoutRef.current !== null) {
             window.clearTimeout(settleTimeoutRef.current);
         }
+        removeBucketDragPreview();
     }, []);
+
+    const startBucketDrag = (event: DragEvent<HTMLElement>) => {
+        if (!bucket) return;
+
+        removeBucketDragPreview();
+        const preview = document.createElement('div');
+        preview.className = `bucket-drag-preview bucket-accent-${accentIndex}`;
+        preview.textContent = bucket.name;
+        document.body.appendChild(preview);
+        bucketDragPreviewRef.current = preview;
+
+        try {
+            event.dataTransfer.setData('text/plain', bucket.id);
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setDragImage(preview, 28, 22);
+            onBucketDragStart?.(bucket.id);
+        } catch {
+            removeBucketDragPreview();
+        }
+    };
+
+    const endBucketDrag = () => {
+        removeBucketDragPreview();
+        onBucketDragEnd?.();
+    };
 
     const drop = (event: DragEvent<HTMLElement>, targetIndex?: number) => {
         if (isBucketDragActive) return;
@@ -207,7 +241,7 @@ export function BucketColumn({
             ref={(element) => {
                 if (bucket) registerColumnRef?.(bucket.id, element);
             }}
-            className={`bucket-column bucket-accent-${accentIndex} drag-source-${dragSourceAccentIndex} column-stagger-${staggerIndex}${isOver ? ' drag-over' : ''}${isWarpHighlight ? ' warp-highlight' : ''}${nudgeFromLeftGap ? ' bucket-drop-nudge-left' : ''}${nudgeFromRightGap ? ' bucket-drop-nudge-right' : ''}${isBucketDropSettled ? ' bucket-drop-settled' : ''}${bucketDropSettleFrom === 'left' ? ' bucket-drop-settled-from-left' : ''}${bucketDropSettleFrom === 'right' ? ' bucket-drop-settled-from-right' : ''}`}
+            className={`bucket-column bucket-accent-${accentIndex} drag-source-${dragSourceAccentIndex} column-stagger-${staggerIndex}${isOver ? ' drag-over' : ''}${isBucketDragSource ? ' bucket-drag-source' : ''}${isWarpHighlight ? ' warp-highlight' : ''}${nudgeFromLeftGap ? ' bucket-drop-nudge-left' : ''}${nudgeFromRightGap ? ' bucket-drop-nudge-right' : ''}${isBucketDropSettled ? ' bucket-drop-settled' : ''}${bucketDropSettleFrom === 'left' ? ' bucket-drop-settled-from-left' : ''}${bucketDropSettleFrom === 'right' ? ' bucket-drop-settled-from-right' : ''}`}
             onDragOver={(event) => {
                 if (isBucketDragActive) return;
                 event.preventDefault();
@@ -260,22 +294,17 @@ export function BucketColumn({
                         )}
                         {bucket && (
                             <>
-                                <button
-                                    type="button"
+                                <span
                                     className="icon-button interaction-drag-handle drag-handle bucket-drag-handle"
                                     draggable
-                                    onDragStart={(event) => {
-                                        if (!bucket) return;
-                                        event.dataTransfer.setData('text/plain', bucket.id);
-                                        event.dataTransfer.effectAllowed = 'move';
-                                        onBucketDragStart?.(bucket.id);
-                                    }}
-                                    onDragEnd={() => onBucketDragEnd?.()}
+                                    onDragStart={startBucketDrag}
+                                    onDragEnd={endBucketDrag}
                                     title="Drag to move bucket"
                                     aria-label="Drag to move bucket"
+                                    role="img"
                                 >
                                     ⠿
-                                </button>
+                                </span>
                                 <button
                                     type="button"
                                     className="icon-button bucket-move-button"
