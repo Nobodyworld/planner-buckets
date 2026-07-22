@@ -82,8 +82,8 @@ describe('BucketColumn drag handle', () => {
         expect(onBucketDragEnd).toHaveBeenCalledOnce();
     });
 
-    it('removes the preview on failed drag setup and component cleanup', () => {
-        const { unmount } = renderBucket(makeBucket());
+    it('keeps bucket drag active when only the optional preview setup fails', () => {
+        const { unmount, onBucketDragStart } = renderBucket(makeBucket());
         const handle = screen.getByRole('img', { name: 'Drag to move bucket' });
         const failedTransfer = createDataTransfer();
         failedTransfer.setDragImage.mockImplementation(() => { throw new Error('drag image failed'); });
@@ -91,6 +91,8 @@ describe('BucketColumn drag handle', () => {
         fireEvent.dragStart(handle, { dataTransfer: failedTransfer });
         expect(document.querySelector('.bucket-drag-preview')).not.toBeInTheDocument();
         expect(failedTransfer.setData).toHaveBeenCalledWith('text/plain', 'bucket-new');
+        expect(failedTransfer.effectAllowed).toBe('move');
+        expect(onBucketDragStart).toHaveBeenCalledWith('bucket-new');
 
         fireEvent.dragStart(handle, { dataTransfer: createDataTransfer() });
         unmount();

@@ -148,8 +148,17 @@ export function BucketColumn({
         try {
             event.dataTransfer.setData('text/plain', bucket.id);
             event.dataTransfer.effectAllowed = 'move';
+        } catch {
+            removeBucketDragPreview();
+            return;
+        }
+
+        // A custom drag image is optional. Some WebView2 builds can reject it
+        // after a native drag has already started; keep the transfer and board
+        // state active so the browser's default preview remains a usable fallback.
+        onBucketDragStart?.(bucket.id);
+        try {
             event.dataTransfer.setDragImage(preview, 28, 22);
-            onBucketDragStart?.(bucket.id);
         } catch {
             removeBucketDragPreview();
         }
