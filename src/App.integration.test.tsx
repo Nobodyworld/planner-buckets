@@ -614,7 +614,7 @@ describe('App integration', () => {
         expect(screen.queryByText(/Copied "Write launch summary"/)).not.toBeInTheDocument();
     });
 
-    it('copies all tasks in a bucket as an ordered checklist', async () => {
+    it('copies a bucket name with its ordered task checklist', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, 'clipboard', {
             value: { writeText },
@@ -629,7 +629,7 @@ describe('App integration', () => {
             expect(writeText).toHaveBeenCalledTimes(1);
         });
 
-        expect(writeText).toHaveBeenCalledWith('1. [ ] Write launch summary\n   Note: Include blockers');
+        expect(writeText).toHaveBeenCalledWith('Bucket: To Do\n1. [ ] Write launch summary\n   Note: Include blockers');
     });
 
     it('pastes copied tasks into another bucket', async () => {

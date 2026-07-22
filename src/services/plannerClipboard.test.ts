@@ -10,6 +10,7 @@ vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({ writeText: tauriMocks.w
 
 import {
     copyTextToClipboard,
+    formatBucketForOrderedCopy,
     formatTaskChecklistLabel,
     formatTaskForOrderedCopy,
     formatTaskForSingleCopy,
@@ -234,6 +235,39 @@ describe('plannerClipboard', () => {
                 updatedAt: '2026-06-30T00:00:00Z',
             };
             expect(formatTaskForOrderedCopy(task, 2)).toMatch(/^3\./);
+        });
+    });
+
+    describe('formatBucketForOrderedCopy', () => {
+        it('keeps the bucket name with its ordered tasks', () => {
+            const tasks: PlannerTask[] = [
+                {
+                    id: 'task-1',
+                    title: 'Review PR',
+                    description: 'Check tests',
+                    bucketId: 'bucket-work',
+                    pinned: false,
+                    completed: false,
+                    archivedAt: null,
+                    createdAt: '2026-06-30T00:00:00Z',
+                    updatedAt: '2026-06-30T00:00:00Z',
+                },
+                {
+                    id: 'task-2',
+                    title: 'Ship release',
+                    description: '',
+                    bucketId: 'bucket-work',
+                    pinned: false,
+                    completed: true,
+                    archivedAt: null,
+                    createdAt: '2026-06-30T00:00:00Z',
+                    updatedAt: '2026-06-30T00:00:00Z',
+                },
+            ];
+
+            expect(formatBucketForOrderedCopy('Work', tasks)).toBe(
+                'Bucket: Work\n1. [ ] Review PR\n   Note: Check tests\n2. [x] Ship release'
+            );
         });
     });
 

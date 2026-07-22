@@ -13,6 +13,7 @@ import { savePlannerDataV2ToLocalStorage, loadPlannerDataV2FromLocalStorage } fr
 import { plannerReducerV2, type PlannerActionV2 } from './state/plannerReducerV2';
 import {
   copyTextToClipboard,
+  formatBucketForOrderedCopy,
   formatTaskChecklistLabel,
   formatTaskForOrderedCopy,
   formatTaskForSingleCopy,
@@ -1368,8 +1369,8 @@ export default function App() {
 
     void (async () => {
       try {
-        await copyTextToClipboard(tasks.map(formatTaskForOrderedCopy).join('\n'));
-        showTemporaryStatus(`Copied ${tasks.length} task${tasks.length === 1 ? '' : 's'} from ${bucketName}`);
+        await copyTextToClipboard(formatBucketForOrderedCopy(bucketName, tasks));
+        showTemporaryStatus(`Copied ${bucketName} and ${tasks.length} task${tasks.length === 1 ? '' : 's'}`);
       } catch {
         showTemporaryStatus(`Could not copy ${bucketName}`);
       }

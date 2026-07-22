@@ -46,6 +46,15 @@ export const formatTaskForOrderedCopy = (task: PlannerTask, index: number): stri
 };
 
 /**
+ * Format a bucket as plain text for copying.
+ * Keeps the bucket label with the ordered task checklist without introducing
+ * a structured export format.
+ */
+export const formatBucketForOrderedCopy = (bucketName: string, tasks: PlannerTask[]): string => {
+    return [`Bucket: ${bucketName}`, ...tasks.map(formatTaskForOrderedCopy)].join('\n');
+};
+
+/**
  * Format a single task with bucket name for copying.
  * Example:
  *   [ ] Task title
