@@ -65,9 +65,7 @@
   --hover-spark-opacity: 0;
   --stagger-column-step: calc(55ms * var(--motion-multiplier));
   --stagger-panel-step: calc(40ms * var(--motion-multiplier));
-  --bucket-neighbor-nudge: calc(8px * var(--space-scale));
-  --bucket-insert-slot-width: calc(18px * var(--space-scale));
-  --bucket-insert-slot-width-active: calc(24px * var(--space-scale));
+  --bucket-insert-hitbox-width: calc(24px * var(--space-scale));
   --task-insert-slot-height: calc(14px / var(--density-scale));
   --task-insert-slot-height-active: calc(18px / var(--density-scale));
   --mode-wash: transparent;
@@ -1222,8 +1220,7 @@ select:focus {
     background var(--motion-fast) var(--ease-standard),
     transform var(--motion-fast) var(--ease-standard),
     opacity var(--motion-fast) var(--ease-standard),
-    box-shadow var(--motion-fast) var(--ease-standard),
-    width var(--motion-fast) var(--ease-standard);
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .board {
@@ -2301,14 +2298,12 @@ h1 {
 }
 
 .bucket-column.bucket-drop-nudge-left {
-  transform: translateX(var(--bucket-neighbor-nudge));
   box-shadow:
     0 12px 26px rgba(20, 33, 60, 0.1),
     0 0 0 1px color-mix(in oklab, var(--bucket-accent) 10%, transparent);
 }
 
 .bucket-column.bucket-drop-nudge-right {
-  transform: translateX(calc(var(--bucket-neighbor-nudge) * -1));
   box-shadow:
     0 12px 26px rgba(20, 33, 60, 0.1),
     0 0 0 1px color-mix(in oklab, var(--bucket-accent) 10%, transparent);
@@ -2378,15 +2373,30 @@ h1 {
   transform: translateY(0);
 }
 
-.bucket-drop-slot {
-  width: 0;
-  margin: 0;
+.bucket-drop-slot-wrapper {
   position: relative;
-  opacity: 0;
-  border-radius: 999px;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
   align-self: stretch;
   overflow: visible;
+}
+
+.bucket-drop-slot {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--bucket-insert-hitbox-width);
+  min-width: var(--bucket-insert-hitbox-width);
+  margin: 0;
+  opacity: 0;
+  border-radius: 999px;
+  overflow: visible;
   pointer-events: none;
+  transform: translateX(-50%) scaleX(0.75);
 }
 
 .bucket-drop-slot::before,
@@ -2425,8 +2435,6 @@ h1 {
 }
 
 .bucket-drop-slot.visible {
-  width: var(--bucket-insert-slot-width);
-  margin: 0 2px;
   opacity: 0.9;
   pointer-events: auto;
   background: linear-gradient(
@@ -2444,14 +2452,13 @@ h1 {
 }
 
 .bucket-drop-slot.active {
-  width: var(--bucket-insert-slot-width-active);
   opacity: 1;
   background: linear-gradient(
     180deg,
     color-mix(in oklab, var(--bucket-accent) 44%, transparent),
     color-mix(in oklab, var(--bucket-accent) 62%, transparent)
   );
-  transform: scaleX(1.04) translateY(-2px);
+  transform: translateX(-50%) scaleX(1.04) translateY(-2px);
   box-shadow:
     0 0 0 2px color-mix(in oklab, var(--bucket-accent) 20%, transparent),
     0 0 24px color-mix(in oklab, var(--bucket-accent) 18%, transparent),
@@ -2484,8 +2491,6 @@ h1 {
 }
 
 .bucket-drop-slot.settled {
-  width: var(--bucket-insert-slot-width-active);
-  margin: 0 2px;
   opacity: 1;
   background: linear-gradient(
     180deg,
@@ -2498,6 +2503,7 @@ h1 {
     0 0 48px color-mix(in oklab, var(--bucket-accent) 16%, transparent);
   animation: bucket-drop-settle var(--anim-drop-settle) var(--ease-emphasis)
     both;
+  transform: translateX(-50%) scaleX(1);
 }
 
 .bucket-drop-slot.settled::before,

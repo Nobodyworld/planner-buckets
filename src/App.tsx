@@ -2108,20 +2108,22 @@ export default function App() {
 
               {activeBuckets.map((bucket, index) => (
                 <Fragment key={bucket.id}>
-                  <div
-                    className={`bucket-drop-slot interaction-drop-slot interaction-bucket-drop-slot bucket-accent-${accentIndexFromBucket(bucket.id)}${draggedBucketId ? ' visible' : ''}${activeBucketDropIndex === index ? ' active' : ''}${settledBucketDropIndex === index ? ' settled' : ''}`}
-                    onDragOver={(event) => {
-                      if (!draggedBucketId) return;
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = 'move';
-                      setActiveBucketDropIndex(index);
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      dropBucketAt(index);
-                    }}
-                    aria-hidden="true"
-                  />
+                  <div className="bucket-drop-slot-wrapper">
+                    <div
+                      className={`bucket-drop-slot interaction-drop-slot interaction-bucket-drop-slot bucket-accent-${accentIndexFromBucket(bucket.id)}${draggedBucketId ? ' visible' : ''}${activeBucketDropIndex === index ? ' active' : ''}${settledBucketDropIndex === index ? ' settled' : ''}`}
+                      onDragOver={(event) => {
+                        if (!draggedBucketId) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = 'move';
+                        setActiveBucketDropIndex(index);
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        dropBucketAt(index);
+                      }}
+                      aria-hidden="true"
+                    />
+                  </div>
                   <BucketColumn
                     columnIndex={index + 1}
                     bucket={bucket}
@@ -2181,20 +2183,22 @@ export default function App() {
               ))}
 
               {activeBuckets.length > 0 && (
-                <div
-                  className={`bucket-drop-slot interaction-drop-slot interaction-bucket-drop-slot bucket-accent-${accentIndexFromBucket(activeBuckets[activeBuckets.length - 1]?.id ?? null)}${draggedBucketId ? ' visible' : ''}${activeBucketDropIndex === activeBuckets.length ? ' active' : ''}${settledBucketDropIndex === activeBuckets.length ? ' settled' : ''}`}
-                  onDragOver={(event) => {
-                    if (!draggedBucketId) return;
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = 'move';
-                    setActiveBucketDropIndex(activeBuckets.length);
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    dropBucketAt(activeBuckets.length);
-                  }}
-                  aria-hidden="true"
-                />
+                <div className="bucket-drop-slot-wrapper">
+                  <div
+                    className={`bucket-drop-slot interaction-drop-slot interaction-bucket-drop-slot bucket-accent-${accentIndexFromBucket(activeBuckets[activeBuckets.length - 1]?.id ?? null)}${draggedBucketId ? ' visible' : ''}${activeBucketDropIndex === activeBuckets.length ? ' active' : ''}${settledBucketDropIndex === activeBuckets.length ? ' settled' : ''}`}
+                    onDragOver={(event) => {
+                      if (!draggedBucketId) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                      setActiveBucketDropIndex(activeBuckets.length);
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      dropBucketAt(activeBuckets.length);
+                    }}
+                    aria-hidden="true"
+                  />
+                </div>
               )}
 
               <section className="bucket-column board-add-bucket-column" aria-label="Board add bucket">

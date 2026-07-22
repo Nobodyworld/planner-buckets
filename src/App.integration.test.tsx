@@ -845,6 +845,40 @@ describe('App integration', () => {
         expect(document.querySelector('.bucket-drag-preview')).not.toBeInTheDocument();
     });
 
+    it('keeps a later bucket wired through visible, active, and settled zero-footprint drop slots', async () => {
+        localStorage.clear();
+        seedPlannerDataV2(overflowingBoardFixture);
+        const { container } = render(<App />);
+
+        const bucketHandles = screen.getAllByRole('img', { name: 'Drag to move bucket' });
+        const laterBucketHandle = bucketHandles[8];
+        const sourceColumn = laterBucketHandle.closest('.bucket-column') as HTMLElement;
+        const beforeOrder = Array.from(container.querySelectorAll('.bucket-column h2')).map((heading) => heading.textContent);
+        const dataTransfer = createDragDataTransfer();
+
+        fireEvent.dragStart(laterBucketHandle, { dataTransfer });
+
+        await waitFor(() => expect(sourceColumn).toHaveClass('bucket-drag-source'));
+        expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'bucket-overflow-9');
+        expect(dataTransfer.effectAllowed).toBe('move');
+
+        const slots = Array.from(container.querySelectorAll('.bucket-drop-slot')) as HTMLElement[];
+        const wrappers = Array.from(container.querySelectorAll('.bucket-drop-slot-wrapper')) as HTMLElement[];
+        expect(wrappers).toHaveLength(slots.length);
+        expect(slots).toHaveLength(10);
+        expect(slots.every((slot) => slot.classList.contains('visible'))).toBe(true);
+        expect(Array.from(container.querySelectorAll('.bucket-column h2')).map((heading) => heading.textContent)).toEqual(beforeOrder);
+
+        fireEvent.dragOver(slots[2], { dataTransfer });
+        await waitFor(() => expect(slots[2]).toHaveClass('active'));
+        expect(sourceColumn).toHaveClass('bucket-drag-source');
+        expect(Array.from(container.querySelectorAll('.bucket-column h2')).map((heading) => heading.textContent)).toEqual(beforeOrder);
+
+        fireEvent.drop(slots[2], { dataTransfer });
+        await waitFor(() => expect(container.querySelector('.bucket-drop-slot.settled')).not.toBeNull());
+        expect(wrappers.every((wrapper) => wrapper.className === 'bucket-drop-slot-wrapper')).toBe(true);
+    });
+
     it('starts an empty browser storage with the v1 default board buckets', async () => {
         localStorage.clear();
 
