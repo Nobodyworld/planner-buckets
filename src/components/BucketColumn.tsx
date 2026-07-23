@@ -35,6 +35,9 @@ interface BucketColumnProps {
     canPasteIntoBucket?: boolean;
     onBucketDragStart?: (bucketId: string) => void;
     onBucketDragEnd?: () => void;
+    bucketDropIndex?: number;
+    onBucketDragHover?: (targetIndex: number) => void;
+    onBucketDrop?: (targetIndex: number) => void;
     onMoveBucketByOffset?: (bucketId: string, offset: -1 | 1) => void;
     canMoveBucketLeft?: boolean;
     canMoveBucketRight?: boolean;
@@ -86,6 +89,9 @@ export function BucketColumn({
     canPasteIntoBucket = false,
     onBucketDragStart,
     onBucketDragEnd,
+    bucketDropIndex,
+    onBucketDragHover,
+    onBucketDrop,
     onMoveBucketByOffset,
     canMoveBucketLeft = false,
     canMoveBucketRight = false,
@@ -167,6 +173,13 @@ export function BucketColumn({
     const endBucketDrag = () => {
         removeBucketDragPreview();
         onBucketDragEnd?.();
+    };
+
+    const getBucketDropTargetIndex = (event: DragEvent<HTMLElement>) => {
+        if (bucketDropIndex === undefined) return null;
+        const rect = event.currentTarget.getBoundingClientRect();
+        const midpoint = rect.left + rect.width / 2;
+        return event.clientX < midpoint ? bucketDropIndex : bucketDropIndex + 1;
     };
 
     const drop = (event: DragEvent<HTMLElement>, targetIndex?: number) => {
@@ -252,7 +265,14 @@ export function BucketColumn({
             }}
             className={`bucket-column bucket-accent-${accentIndex} drag-source-${dragSourceAccentIndex} column-stagger-${staggerIndex}${isOver ? ' drag-over' : ''}${isBucketDragSource ? ' bucket-drag-source' : ''}${isWarpHighlight ? ' warp-highlight' : ''}${nudgeFromLeftGap ? ' bucket-drop-nudge-left' : ''}${nudgeFromRightGap ? ' bucket-drop-nudge-right' : ''}${isBucketDropSettled ? ' bucket-drop-settled' : ''}${bucketDropSettleFrom === 'left' ? ' bucket-drop-settled-from-left' : ''}${bucketDropSettleFrom === 'right' ? ' bucket-drop-settled-from-right' : ''}`}
             onDragOver={(event) => {
-                if (isBucketDragActive) return;
+                if (isBucketDragActive) {
+                    const targetIndex = getBucketDropTargetIndex(event);
+                    if (targetIndex === null || !onBucketDragHover) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                    onBucketDragHover(targetIndex);
+                    return;
+                }
                 event.preventDefault();
                 event.dataTransfer.dropEffect = 'move';
                 setIsOver(true);
@@ -263,7 +283,17 @@ export function BucketColumn({
                     setIsOver(false);
                 }
             }}
-            onDrop={(event) => drop(event, tasks.length)}
+            onDrop={(event) => {
+                if (isBucketDragActive) {
+                    const targetIndex = getBucketDropTargetIndex(event);
+                    if (targetIndex === null || !onBucketDrop) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onBucketDrop(targetIndex);
+                    return;
+                }
+                drop(event, tasks.length);
+            }}
             onAnimationEnd={(event) => {
                 if (!isBucketDropSettled) return;
                 if (event.animationName !== 'bucket-relocate-settle') return;

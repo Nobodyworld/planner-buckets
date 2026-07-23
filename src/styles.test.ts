@@ -47,3 +47,20 @@ describe('bucket drop slot layout contract', () => {
         expect(cssRule('.interaction-drop-slot,\n.drop-slot,\n.bucket-drop-slot')).not.toMatch(/\bwidth\s+var\(--motion/);
     });
 });
+
+describe('board zoom coordinate contract', () => {
+    it.each([
+        ['.board-stage.board-zoom-0', '0.88'],
+        ['.board-stage.board-zoom-3', '1.08'],
+        ['.board-stage.board-zoom-4', '1.14'],
+    ])('keeps %s at its current supported scale', (selector, scale) => {
+        expect(cssRule(selector)).toMatch(new RegExp(`--board-zoom:\\s*${scale.replace('.', '\\.')};`));
+    });
+
+    it('keeps zoom as a board transform so pointer and column rectangles share viewport coordinates', () => {
+        const board = cssRule('.board');
+
+        expect(board).toMatch(/transform:\s*scale\(var\(--board-zoom\)\);/);
+        expect(board).toMatch(/transform-origin:\s*top left;/);
+    });
+});

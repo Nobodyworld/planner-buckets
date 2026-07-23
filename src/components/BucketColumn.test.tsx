@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { BucketV2 } from '../types/v2';
+import type { BucketV2, PlannerTaskV2 } from '../types/v2';
 import { BucketColumn } from './BucketColumn';
 
-const makeBucket = (pinned = false): BucketV2 => ({
+const makeBucket = (pinned = false, name = pinned ? 'Pinned bucket' : 'New bucket'): BucketV2 => ({
     id: pinned ? 'bucket-pinned' : 'bucket-new',
     projectId: 'project-1',
-    name: pinned ? 'Pinned bucket' : 'New bucket',
+    name,
     description: '',
     templateDefinitionId: null,
     priority: 0,
@@ -15,19 +15,49 @@ const makeBucket = (pinned = false): BucketV2 => ({
     updatedAt: '2026-07-18T00:00:00.000Z',
 });
 
-const renderBucket = (bucket: BucketV2, isWarpHighlight = false, isBucketDragSource = false) => {
+const makeTask = (): PlannerTaskV2 => ({
+    id: 'task-1',
+    projectId: 'project-1',
+    bucketId: 'bucket-new',
+    title: 'Nested task',
+    description: '',
+    priority: 0,
+    resourceTags: [],
+    pinned: false,
+    completed: false,
+    archivedAt: null,
+    createdAt: '2026-07-18T00:00:00.000Z',
+    updatedAt: '2026-07-18T00:00:00.000Z',
+});
+
+interface RenderBucketOptions {
+    bucketDropIndex?: number;
+    isBucketDragActive?: boolean;
+    tasks?: PlannerTaskV2[];
+}
+
+const renderBucket = (
+    bucket: BucketV2,
+    isWarpHighlight = false,
+    isBucketDragSource = false,
+    options: RenderBucketOptions = {},
+) => {
     const onBucketDragStart = vi.fn();
     const onBucketDragEnd = vi.fn();
+    const onBucketDragHover = vi.fn();
+    const onBucketDrop = vi.fn();
     const result = render(
         <BucketColumn
             columnIndex={11}
             bucket={bucket}
-            tasks={[]}
+            tasks={options.tasks ?? []}
             draggedTaskId={null}
+            isBucketDragActive={options.isBucketDragActive}
             draggedAccentIndex={null}
             highlightedTaskId={null}
             isWarpHighlight={isWarpHighlight}
             isBucketDragSource={isBucketDragSource}
+            bucketDropIndex={options.bucketDropIndex}
             onQuickAddTask={vi.fn()}
             onEditTask={vi.fn()}
             onDeleteTask={vi.fn()}
@@ -38,16 +68,38 @@ const renderBucket = (bucket: BucketV2, isWarpHighlight = false, isBucketDragSou
             onDragEnd={vi.fn()}
             onBucketDragStart={onBucketDragStart}
             onBucketDragEnd={onBucketDragEnd}
+            onBucketDragHover={onBucketDragHover}
+            onBucketDrop={onBucketDrop}
         />
     );
-    return { ...result, onBucketDragStart, onBucketDragEnd };
+    return {
+        ...result,
+        onBucketDragStart,
+        onBucketDragEnd,
+        onBucketDragHover,
+        onBucketDrop,
+    };
 };
 
 const createDataTransfer = () => ({
+    dropEffect: 'none',
     setData: vi.fn(),
     setDragImage: vi.fn(),
     effectAllowed: 'none',
 });
+
+const fireBucketDragEvent = (
+    type: 'dragover' | 'drop',
+    target: HTMLElement,
+    clientX: number,
+    dataTransfer: ReturnType<typeof createDataTransfer>,
+) => {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clientX', { value: clientX });
+    Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+    fireEvent(target, event);
+    return event;
+};
 
 describe('BucketColumn drag handle', () => {
     it.each([false, true])('renders an enabled draggable handle when pinned is %s', (pinned) => {
@@ -114,4 +166,101 @@ describe('BucketColumn drag handle', () => {
         expect(onBucketDragStart).toHaveBeenCalledOnce();
         vi.unstubAllGlobals();
     });
+});
+
+describe('BucketColumn midpoint bucket targets', () => {
+    it('chooses the boundary before or after the hovered bucket and updates when crossing its midpoint', () => {
+        const {
+            container,
+            onBucketDragHover,
+        } = renderBucket(makeBucket(), false, false, {
+            bucketDropIndex: 8,
+            isBucketDragActive: true,
+        });
+        const column = container.querySelector('.bucket-column') as HTMLElement;
+        vi.spyOn(column, 'getBoundingClientRect').mockReturnValue({
+            x: 100,
+            y: 40,
+            left: 100,
+            top: 40,
+            right: 300,
+            bottom: 440,
+            width: 200,
+            height: 400,
+            toJSON: () => ({}),
+        });
+        const dataTransfer = createDataTransfer();
+
+        const leftHalfEvent = fireBucketDragEvent('dragover', column, 199, dataTransfer);
+        expect(leftHalfEvent.defaultPrevented).toBe(true);
+        expect(dataTransfer.dropEffect).toBe('move');
+        expect(onBucketDragHover).toHaveBeenLastCalledWith(8);
+
+        fireBucketDragEvent('dragover', column, 201, dataTransfer);
+        expect(onBucketDragHover).toHaveBeenLastCalledWith(9);
+        expect(onBucketDragHover.mock.calls).toEqual([[8], [9]]);
+    });
+
+    it('uses the after-bucket boundary at the exact midpoint and on drop', () => {
+        const {
+            container,
+            onBucketDrop,
+        } = renderBucket(makeBucket(), false, false, {
+            bucketDropIndex: 3,
+            isBucketDragActive: true,
+        });
+        const column = container.querySelector('.bucket-column') as HTMLElement;
+        vi.spyOn(column, 'getBoundingClientRect').mockReturnValue({
+            x: 20,
+            y: 40,
+            left: 20,
+            top: 40,
+            right: 220,
+            bottom: 440,
+            width: 200,
+            height: 400,
+            toJSON: () => ({}),
+        });
+        const dataTransfer = createDataTransfer();
+
+        const dropEvent = fireBucketDragEvent('drop', column, 120, dataTransfer);
+
+        expect(dropEvent.defaultPrevented).toBe(true);
+        expect(onBucketDrop).toHaveBeenCalledWith(4);
+    });
+
+    it.each(['.task-row', '.interaction-task-drop-slot'])(
+        'lets bucket drag events from nested task content bubble to the column target through %s',
+        (selector) => {
+            const {
+                container,
+                onBucketDragHover,
+                onBucketDrop,
+            } = renderBucket(makeBucket(), false, false, {
+                bucketDropIndex: 5,
+                isBucketDragActive: true,
+                tasks: [makeTask()],
+            });
+            const column = container.querySelector('.bucket-column') as HTMLElement;
+            const nestedTarget = container.querySelector(selector) as HTMLElement;
+            vi.spyOn(column, 'getBoundingClientRect').mockReturnValue({
+                x: 400,
+                y: 40,
+                left: 400,
+                top: 40,
+                right: 700,
+                bottom: 440,
+                width: 300,
+                height: 400,
+                toJSON: () => ({}),
+            });
+            const dataTransfer = createDataTransfer();
+
+            fireBucketDragEvent('dragover', nestedTarget, 401, dataTransfer);
+            expect(onBucketDragHover).toHaveBeenCalledWith(5);
+
+            fireBucketDragEvent('drop', nestedTarget, 699, dataTransfer);
+            expect(onBucketDrop).toHaveBeenCalledWith(6);
+        },
+    );
 });

@@ -990,7 +990,8 @@ export default function App() {
   const moveBucketByOffset = (bucketId: string, offset: -1 | 1) => {
     const sourceIndex = activeBuckets.findIndex((bucket) => bucket.id === bucketId);
     if (sourceIndex < 0) return;
-    const targetIndex = Math.max(0, Math.min(activeBuckets.length - 1, sourceIndex + offset));
+    const targetBoundary = sourceIndex + (offset < 0 ? -1 : 2);
+    const targetIndex = Math.max(0, Math.min(activeBuckets.length, targetBoundary));
     if (targetIndex === sourceIndex) return;
     dispatchPlanner({ type: 'MOVE_BUCKET', projectId: effectiveActiveProjectId, bucketId, targetIndex });
   };
@@ -2164,6 +2165,9 @@ export default function App() {
                     onBucketDragEnd={() => {
                       clearActiveDrag();
                     }}
+                    bucketDropIndex={index}
+                    onBucketDragHover={setActiveBucketDropIndex}
+                    onBucketDrop={dropBucketAt}
                     onMoveBucketByOffset={moveBucketByOffset}
                     canMoveBucketLeft={index > 0}
                     canMoveBucketRight={index < activeBuckets.length - 1}
