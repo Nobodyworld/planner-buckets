@@ -64,3 +64,38 @@ describe('board zoom coordinate contract', () => {
         expect(board).toMatch(/transform-origin:\s*top left;/);
     });
 });
+
+describe('bucket header containment contract', () => {
+    it('lets the title region shrink and wrap without forcing a fixed width', () => {
+        const title = cssRule('.bucket-title-block');
+        const heading = cssRule('.bucket-header h2');
+
+        expect(title).toMatch(/min-width:\s*0;/);
+        expect(title).toMatch(/flex:\s*1 1 auto;/);
+        expect(title).not.toMatch(/white-space:\s*nowrap;/);
+        expect(title).not.toMatch(/\n\s*width\s*:/);
+        expect(heading).toMatch(/overflow-wrap:\s*anywhere;/);
+        expect(heading).not.toMatch(/white-space:\s*nowrap;/);
+        expect(heading).not.toMatch(/\n\s*(?:min-)?width\s*:/);
+    });
+
+    it('bounds all actions in a four-column grid without escaping the header', () => {
+        const actions = cssRule('.bucket-actions');
+
+        expect(actions).toMatch(/flex:\s*0 0 auto;/);
+        expect(actions).toMatch(/display:\s*grid;/);
+        expect(actions).toMatch(/grid-template-columns:\s*repeat\(4,\s*28px\);/);
+        expect(actions).toMatch(/gap:\s*4px;/);
+        expect(actions).toMatch(/align-content:\s*start;/);
+        expect(actions).not.toMatch(/position:\s*absolute;/);
+        expect(actions).not.toMatch(/display:\s*none;/);
+        expect(actions).not.toMatch(/white-space:\s*nowrap;/);
+    });
+
+    it('preserves the existing narrow bucket-width contract', () => {
+        const narrowBucket = cssRule('.bucket-column', -1);
+
+        expect(narrowBucket).toMatch(/width:\s*min\(86vw,\s*340px\);/);
+        expect(narrowBucket).toMatch(/min-width:\s*min\(86vw,\s*340px\);/);
+    });
+});

@@ -1273,9 +1273,15 @@ select:focus {
   margin-bottom: 12px;
 }
 
+.bucket-title-block {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .bucket-header h2 {
   margin-bottom: 2px;
   font-size: 1rem;
+  overflow-wrap: anywhere;
 }
 
 .bucket-header span {
@@ -1284,8 +1290,12 @@ select:focus {
 }
 
 .bucket-actions {
-  display: flex;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 28px);
   gap: 4px;
+  align-content: start;
+  justify-items: center;
 }
 
 .icon-button,
@@ -3056,11 +3066,6 @@ h1 {
 
   .task-card-actions {
     gap: 8px;
-  }
-
-  .bucket-actions {
-    flex-wrap: wrap;
-    gap: 5px;
   }
 
   .data-action-row {

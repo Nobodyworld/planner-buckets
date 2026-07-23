@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { BucketV2, PlannerTaskV2 } from '../types/v2';
 import { BucketColumn } from './BucketColumn';
@@ -34,6 +34,10 @@ interface RenderBucketOptions {
     bucketDropIndex?: number;
     isBucketDragActive?: boolean;
     tasks?: PlannerTaskV2[];
+    withAllHeaderActions?: boolean;
+    canPasteIntoBucket?: boolean;
+    canMoveBucketLeft?: boolean;
+    canMoveBucketRight?: boolean;
 }
 
 const renderBucket = (
@@ -46,11 +50,18 @@ const renderBucket = (
     const onBucketDragEnd = vi.fn();
     const onBucketDragHover = vi.fn();
     const onBucketDrop = vi.fn();
+    const onCopyBucketTasks = vi.fn();
+    const onPasteIntoBucket = vi.fn();
+    const onMoveBucketByOffset = vi.fn();
+    const onToggleBucketPin = vi.fn();
+    const onRenameBucket = vi.fn();
+    const onDeleteBucket = vi.fn();
+    const tasks = options.tasks ?? [];
     const result = render(
         <BucketColumn
             columnIndex={11}
             bucket={bucket}
-            tasks={options.tasks ?? []}
+            tasks={tasks}
             draggedTaskId={null}
             isBucketDragActive={options.isBucketDragActive}
             draggedAccentIndex={null}
@@ -70,6 +81,15 @@ const renderBucket = (
             onBucketDragEnd={onBucketDragEnd}
             onBucketDragHover={onBucketDragHover}
             onBucketDrop={onBucketDrop}
+            onCopyBucketTasks={options.withAllHeaderActions ? onCopyBucketTasks : undefined}
+            onPasteIntoBucket={options.withAllHeaderActions ? onPasteIntoBucket : undefined}
+            canPasteIntoBucket={options.canPasteIntoBucket}
+            onMoveBucketByOffset={options.withAllHeaderActions ? onMoveBucketByOffset : undefined}
+            canMoveBucketLeft={options.canMoveBucketLeft}
+            canMoveBucketRight={options.canMoveBucketRight}
+            onToggleBucketPin={options.withAllHeaderActions ? onToggleBucketPin : undefined}
+            onRenameBucket={options.withAllHeaderActions ? onRenameBucket : undefined}
+            onDeleteBucket={options.withAllHeaderActions ? onDeleteBucket : undefined}
         />
     );
     return {
@@ -78,6 +98,12 @@ const renderBucket = (
         onBucketDragEnd,
         onBucketDragHover,
         onBucketDrop,
+        onCopyBucketTasks,
+        onPasteIntoBucket,
+        onMoveBucketByOffset,
+        onToggleBucketPin,
+        onRenameBucket,
+        onDeleteBucket,
     };
 };
 
@@ -107,6 +133,7 @@ describe('BucketColumn drag handle', () => {
         const handle = screen.getByRole('img', { name: 'Drag to move bucket' });
         expect(handle).toHaveAttribute('draggable', 'true');
         expect(handle.tagName).toBe('SPAN');
+        expect(handle).toHaveAttribute('tabindex', '0');
     });
 
     it('keeps a newly highlighted bucket draggable at a high stagger index', () => {
@@ -165,6 +192,102 @@ describe('BucketColumn drag handle', () => {
         expect(handle).toHaveAttribute('draggable', 'true');
         expect(onBucketDragStart).toHaveBeenCalledOnce();
         vi.unstubAllGlobals();
+    });
+});
+
+describe('BucketColumn header actions', () => {
+    it.each([false, true])('keeps the complete accessible action set inside a populated bucket when pinned is %s', (pinned) => {
+        const bucket = makeBucket(pinned);
+        const { container } = renderBucket(bucket, false, false, {
+            tasks: [{ ...makeTask(), bucketId: bucket.id }],
+            withAllHeaderActions: true,
+            canPasteIntoBucket: true,
+            canMoveBucketLeft: true,
+            canMoveBucketRight: true,
+        });
+        const column = container.querySelector('.bucket-column') as HTMLElement;
+        const header = column.querySelector('.bucket-header') as HTMLElement;
+        const actions = header.querySelector('.bucket-actions') as HTMLElement;
+        const actionQueries = [
+            ['button', `Copy all tasks in ${bucket.name}`],
+            ['button', `Paste tasks into ${bucket.name}`],
+            ['img', 'Drag to move bucket'],
+            ['button', 'Move bucket left'],
+            ['button', 'Move bucket right'],
+            ['button', pinned ? 'Unpin bucket' : 'Pin bucket to left group'],
+            ['button', 'Rename bucket'],
+            ['button', 'Delete bucket'],
+        ] as const;
+
+        expect(actions).toBeInTheDocument();
+        expect(actions.children).toHaveLength(8);
+        expect(within(actions).getAllByRole('button')).toHaveLength(7);
+
+        for (const [role, name] of actionQueries) {
+            const control = within(actions).getByRole(role, { name });
+            expect(header).toContainElement(control);
+            expect(column).toContainElement(control);
+            expect(control).toHaveAttribute('aria-label', name);
+            expect(control.tabIndex).toBe(0);
+            control.focus();
+            expect(control).toHaveFocus();
+        }
+    });
+
+    it.each([
+        {
+            label: 'empty',
+            tasks: [] as PlannerTaskV2[],
+            countLabel: '0 tasks',
+            copyLabel: 'No tasks to copy from New bucket',
+            copyDisabled: true,
+        },
+        {
+            label: 'populated',
+            tasks: [makeTask()],
+            countLabel: '1 task',
+            copyLabel: 'Copy all tasks in New bucket',
+            copyDisabled: false,
+        },
+    ])('keeps all actions in the header for an $label bucket', ({ tasks, countLabel, copyLabel, copyDisabled }) => {
+        const { container } = renderBucket(makeBucket(), false, false, {
+            tasks,
+            withAllHeaderActions: true,
+            canPasteIntoBucket: true,
+            canMoveBucketLeft: true,
+            canMoveBucketRight: true,
+        });
+        const header = container.querySelector('.bucket-header') as HTMLElement;
+        const titleBlock = header.querySelector('.bucket-title-block') as HTMLElement;
+        const actions = header.querySelector('.bucket-actions') as HTMLElement;
+        const copyButton = within(actions).getByRole('button', { name: copyLabel });
+
+        expect(titleBlock).toHaveTextContent(countLabel);
+        expect(actions.children).toHaveLength(8);
+        expect(copyButton).toHaveProperty('disabled', copyDisabled);
+    });
+
+    it.each([
+        'QuarterlyRoadmapDependenciesAndLaunchReadinessWithoutAnyBreakCharacters',
+        'Quarterly roadmap dependencies and launch readiness across every delivery group',
+    ])('keeps a long bucket name in the named title block alongside its actions: %s', (name) => {
+        const bucket = makeBucket(false, name);
+        const { container } = renderBucket(bucket, false, false, {
+            tasks: [{ ...makeTask(), bucketId: bucket.id }],
+            withAllHeaderActions: true,
+            canPasteIntoBucket: true,
+            canMoveBucketLeft: true,
+            canMoveBucketRight: true,
+        });
+        const header = container.querySelector('.bucket-header') as HTMLElement;
+        const titleBlock = header.querySelector('.bucket-title-block') as HTMLElement;
+        const title = within(titleBlock).getByRole('heading', { level: 2 });
+        const actions = header.querySelector('.bucket-actions') as HTMLElement;
+
+        expect(title.textContent).toBe(name);
+        expect(titleBlock.nextElementSibling).toBe(actions);
+        expect(header).toContainElement(actions);
+        expect(actions.children).toHaveLength(8);
     });
 });
 

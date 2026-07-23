@@ -301,7 +301,7 @@ export function BucketColumn({
             }}
         >
             <header className="bucket-header">
-                <div>
+                <div className="bucket-title-block">
                     <h2>{bucketLabel}</h2>
                     <span>{tasks.length} task{tasks.length === 1 ? '' : 's'}</span>
                 </div>
@@ -341,6 +341,7 @@ export function BucketColumn({
                                     title="Drag to move bucket"
                                     aria-label="Drag to move bucket"
                                     role="img"
+                                    tabIndex={0}
                                 >
                                     ⠿
                                 </span>
@@ -373,10 +374,22 @@ export function BucketColumn({
                                 >
                                     {bucket.pinned ? '📌' : '◯'}
                                 </button>
-                                <button type="button" className="icon-button" onClick={() => onRenameBucket?.(bucket)} title="Rename bucket">
+                                <button
+                                    type="button"
+                                    className="icon-button"
+                                    onClick={() => onRenameBucket?.(bucket)}
+                                    title="Rename bucket"
+                                    aria-label="Rename bucket"
+                                >
                                     ✎
                                 </button>
-                                <button type="button" className="icon-button danger" onClick={() => onDeleteBucket?.(bucket)} title="Delete bucket">
+                                <button
+                                    type="button"
+                                    className="icon-button danger"
+                                    onClick={() => onDeleteBucket?.(bucket)}
+                                    title="Delete bucket"
+                                    aria-label="Delete bucket"
+                                >
                                     ×
                                 </button>
                             </>
